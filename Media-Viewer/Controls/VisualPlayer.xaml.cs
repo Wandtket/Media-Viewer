@@ -1,10 +1,10 @@
 ﻿using CommunityToolkit.WinUI;
 using FFMpegCore;
-using MediaStudio.Controls.Dialogs;
-using MediaStudio.Extensions;
-using MediaStudio.Pages;
-using MediaStudio.Studio.Enums;
-using MediaStudio.Studio.Models;
+using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
+using MediaViewer.Extensions;
+using MediaViewer.Models;
+using MediaViewer.Pages;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,7 +15,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Devices.Enumeration;
@@ -36,7 +35,7 @@ using Pointer = Microsoft.UI.Xaml.Input.Pointer;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace MediaStudio.Controls;
+namespace MediaViewer.Controls;
 
 
 

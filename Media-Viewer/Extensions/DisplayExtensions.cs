@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using Windows.Graphics.Display;
 using WinRT.Interop;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
     public static class DisplayExtensions

@@ -1,43 +1,20 @@
 ﻿using FFMpegCore;
-using MediaStudio.Controls;
-using MediaStudio.Controls.Dialogs;
-using MediaStudio.Extensions;
-using MediaStudio.Pages;
-using MediaStudio.Studio;
-using MediaStudio.Studio.Enums;
-using MediaStudio.Studio.Models;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Windowing;
+using MediaViewer.Controls;
+using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
+using MediaViewer.Extensions;
+using MediaViewer.Pages;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
 using Microsoft.Win32.SafeHandles;
 using Microsoft.Windows.AppLifecycle;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Text.Json;
-using System.Text.Json;
-using System.Threading.Tasks;
-using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.Storage.Search;
-using Windows.System;
-using Windows.UI.Core;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
@@ -48,7 +25,7 @@ using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace MediaStudio
+namespace MediaViewer
 {
 
     /// <summary>

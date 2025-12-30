@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace MediaStudio.Studio.Models
+namespace MediaViewer.Models
 {
     public class ChapterInfo
     {

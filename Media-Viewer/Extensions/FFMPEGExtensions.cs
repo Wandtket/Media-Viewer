@@ -1,5 +1,5 @@
 ﻿using FFMpegCore;
-using MediaStudio.Studio.Models;
+using MediaViewer.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class FFmpegExtensions
     {

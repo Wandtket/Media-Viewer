@@ -4,7 +4,7 @@ using System.Text;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace MediaStudio.Studio.Models
+namespace MediaViewer.Models
 {
 
     public class ShareData

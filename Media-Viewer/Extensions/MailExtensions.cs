@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Windows.System;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class Email
     {

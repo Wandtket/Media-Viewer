@@ -1,4 +1,4 @@
-﻿using MediaStudio.Controls.Dialogs;
+﻿using MediaViewer.Controls.Dialogs;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,7 +14,7 @@ using Windows.System;
 using CsvHelper;
 
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
     public static class IEnumerableExtensions

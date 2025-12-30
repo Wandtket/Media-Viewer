@@ -1,5 +1,5 @@
-﻿using MediaStudio.Controls.Dialogs;
-using MediaStudio.Studio.Enums;
+﻿using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
@@ -22,7 +22,7 @@ using Windows.System;
 using WinRT;
 using Image = Microsoft.UI.Xaml.Controls.Image;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
     internal static class Files

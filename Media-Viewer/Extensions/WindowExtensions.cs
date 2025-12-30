@@ -1,4 +1,4 @@
-﻿using MediaStudio.Studio.Enums;
+﻿using MediaViewer.Enums;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
@@ -14,7 +14,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
 

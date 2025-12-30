@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Studio.Models
+namespace MediaViewer.Models
 {
 
     public partial class MediaItem : ObservableObject

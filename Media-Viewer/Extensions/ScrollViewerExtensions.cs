@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class ScrollViewerExtensions
     {

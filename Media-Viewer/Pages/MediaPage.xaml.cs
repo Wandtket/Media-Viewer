@@ -1,6 +1,6 @@
-using MediaStudio.Controls;
-using MediaStudio.Extensions;
-using MediaStudio.Studio.Enums;
+using MediaViewer.Controls;
+using MediaViewer.Enums;
+using MediaViewer.Extensions;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
@@ -13,7 +13,7 @@ using Windows.Storage.Search;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace MediaStudio.Pages;
+namespace MediaViewer.Pages;
 
 /// <summary>
 /// An empty page that can be used on its own or navigated to within a Frame.

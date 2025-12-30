@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Controls
+namespace MediaViewer.Controls
 {
     public class VisualCanvas : Canvas
     {

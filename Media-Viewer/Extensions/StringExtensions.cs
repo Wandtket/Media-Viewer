@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class StringExtensions
     {

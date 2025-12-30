@@ -1,6 +1,6 @@
-﻿using MediaStudio.Pages;
-using MediaStudio.Studio.Enums;
-using MediaStudio.Studio.Models;
+﻿using MediaViewer.Enums;
+using MediaViewer.Models;
+using MediaViewer.Pages;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,7 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
     public sealed class CustomMediaTransportControls : MediaTransportControls

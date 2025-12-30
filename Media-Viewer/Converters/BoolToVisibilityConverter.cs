@@ -2,7 +2,7 @@
 using Microsoft.UI.Xaml.Data;
 using System;
 
-namespace MediaStudio.Converters
+namespace MediaViewer.Converters
 {
     internal class BoolToVisibilityConverter : IValueConverter
     {

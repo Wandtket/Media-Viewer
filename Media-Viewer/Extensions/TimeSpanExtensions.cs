@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class TimeSpanExtensions
     {

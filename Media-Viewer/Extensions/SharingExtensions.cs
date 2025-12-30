@@ -1,4 +1,4 @@
-﻿using MediaStudio.Controls.Dialogs;
+﻿using MediaViewer.Controls.Dialogs;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
 
     public static class DataTransfer

@@ -1,4 +1,4 @@
-using MediaStudio.Extensions;
+using MediaViewer.Extensions;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Threading.Tasks;
@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace MediaStudio.Controls.Dialogs
+namespace MediaViewer.Controls.Dialogs
 {
 
     /// <summary>

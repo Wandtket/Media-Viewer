@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 
-namespace MediaStudio.Studio.Enums
+namespace MediaViewer.Enums
 {
     public enum RepeatMode
     {

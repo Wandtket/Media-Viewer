@@ -1,9 +1,9 @@
 using CommunityToolkit.WinUI;
-using MediaStudio.Controls;
-using MediaStudio.Controls.Dialogs;
-using MediaStudio.Extensions;
-using MediaStudio.Pages;
-using MediaStudio.Studio.Enums;
+using MediaViewer.Controls;
+using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
+using MediaViewer.Extensions;
+using MediaViewer.Pages;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,7 +19,7 @@ using Windows.System;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace MediaStudio
+namespace MediaViewer
 {
 
     /// <summary>

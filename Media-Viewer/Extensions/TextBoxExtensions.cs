@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Threading.Tasks;
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public static class TextBoxExtensions
     {

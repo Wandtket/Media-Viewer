@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 
 
-namespace MediaStudio.Extensions
+namespace MediaViewer.Extensions
 {
     public class CameraExtensions
     {

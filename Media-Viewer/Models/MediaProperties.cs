@@ -1,23 +1,18 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.WinUI.Controls;
-using MediaStudio.Controls.Dialogs;
-using MediaStudio.Extensions;
-using MediaStudio.Studio.Enums;
+using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
+using MediaViewer.Models;
+using MediaViewer.Extensions;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace MediaStudio.Studio.Models
+namespace MediaViewer.Models
 {
 
     public partial class MediaProperties : ObservableObject
