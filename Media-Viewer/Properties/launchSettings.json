@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "MediaViewer (Package)": {
+      "commandName": "MsixPackage",
+      "doNotLaunchApp": false
+    },
+    "MediaViewer (Unpackaged)": {
+      "commandName": "Project"
+    },
+    "Remote Machine": {
+      "commandName": "MsixPackage",
+      "authenticationMode": "Windows",
+      "remoteDebugMachine": "192.168.244.128",
+      "remoteDebugEnabled": true,
+      "nativeDebugging": true
+    }
+  }
+}

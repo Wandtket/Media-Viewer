@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="MediaStudio.Controls.Dialogs.ErrorBoxContent"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Controls.Dialogs"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Style="{StaticResource DefaultContentDialogStyle}"
+    mc:Ignorable="d"
+    PrimaryButtonText="Take a screenshot"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    SecondaryButtonText="Dismiss">
+
+    <Grid RowSpacing="3">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10" Spacing="10">
+            <FontIcon Glyph="&#xEBE8;" FontFamily="Segoe MDL2 Assets" FontSize="16"/>
+            <TextBlock x:Name="ErrorTitle" FontSize="20" FontWeight="SemiBold" x:FieldModifier="public"/>
+        </StackPanel>
+
+        <TextBlock
+            Grid.Row="1"
+            Text="The following error has occurred. Please contact the developer if you have any questions."
+            FontSize="16"
+            Margin="0,0,0,5"
+            TextWrapping="Wrap"/>
+
+        <TextBlock x:Name="ErrorMessage" Grid.Row="2"  IsTextSelectionEnabled="True" TextWrapping="WrapWholeWords" x:FieldModifier="public" />
+
+    </Grid>
+
+</ContentDialog>

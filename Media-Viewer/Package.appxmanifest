@@ -1,0 +1,141 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:uap6="http://schemas.microsoft.com/appx/manifest/uap/windows10/6"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:iot2="http://schemas.microsoft.com/appx/manifest/iot/windows10/2"  
+  IgnorableNamespaces="uap rescap uap6 uap3 desktop4 iot2">
+
+  <Identity
+    Name="7715ab82-d2d4-4346-acad-2607e09d100e"
+    Publisher="CN=Tyler Wandtke, O=Tyler Wandtke, C=US"
+    Version="1.0.7.0" />
+
+  <mp:PhoneIdentity PhoneProductId="7715ab82-d2d4-4346-acad-2607e09d100e" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>Media Viewer</DisplayName>
+    <PublisherDisplayName>Tyler Wandtke</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$"
+	  desktop4:SupportsMultipleInstances="true"
+      iot2:SupportsMultipleInstances="true">
+      <uap:VisualElements
+        DisplayName="Media Viewer"
+        Description="A lite recreation of the default Photos app on Windows."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png"  Square71x71Logo="Assets\SmallTile.png" Square310x310Logo="Assets\LargeTile.png"/>
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        <uap:InitialRotationPreference>
+          <uap:Rotation Preference="landscape"/>
+          <uap:Rotation Preference="portrait"/>
+          <uap:Rotation Preference="landscapeFlipped"/>
+          <uap:Rotation Preference="portraitFlipped"/></uap:InitialRotationPreference>
+      </uap:VisualElements>
+      <Extensions>
+		  <uap:Extension Category="windows.fileTypeAssociation">
+			  <uap:FileTypeAssociation Name="media-viewer-audio">
+				  <uap:SupportedFileTypes>
+					  <uap:FileType ContentType="audio/3gp">.3gp</uap:FileType>
+					  <uap:FileType ContentType="audio/flac">.flac</uap:FileType>
+					  <uap:FileType ContentType="audio/m4a">.m4a</uap:FileType>
+					  <uap:FileType ContentType="audio/mp2">.mp2</uap:FileType>
+					  <uap:FileType ContentType="audio/mp3">.mp3</uap:FileType>
+					  <uap:FileType ContentType="audio/wav">.wav</uap:FileType>
+					  <uap:FileType ContentType="audio/wma">.wma</uap:FileType>
+					  <uap:FileType ContentType="audio/webm">.webm</uap:FileType>
+				  </uap:SupportedFileTypes>
+				  <uap:DisplayName>Audio</uap:DisplayName>
+				  <uap:Logo>Assets\FileType-Video.png</uap:Logo>
+				  <uap:EditFlags OpenIsSafe="true"/>
+			  </uap:FileTypeAssociation>
+		  </uap:Extension>
+		  <uap:Extension Category="windows.fileTypeAssociation">
+			  <uap:FileTypeAssociation Name="media-viewer-video">
+				  <uap:SupportedFileTypes>
+					  <uap:FileType ContentType="video/flv">.flv</uap:FileType>
+					  <uap:FileType ContentType="video/avi">.avi</uap:FileType>
+					  <uap:FileType ContentType="video/mpg">.mpg</uap:FileType>
+					  <uap:FileType ContentType="video/mov">.mov</uap:FileType>
+					  <uap:FileType ContentType="video/wmv">.wmv</uap:FileType>
+					  <uap:FileType ContentType="video/mp4">.mp4</uap:FileType>
+					  <uap:FileType ContentType="video/m4v">.m4v</uap:FileType>
+					  <uap:FileType ContentType="video/mpeg">.mpeg</uap:FileType>
+					  <uap:FileType ContentType="video/f4v">.f4v</uap:FileType>
+					  <uap:FileType ContentType="video/mkv">.mkv</uap:FileType>
+				  </uap:SupportedFileTypes>
+				  <uap:DisplayName>Video</uap:DisplayName>
+				  <uap:EditFlags OpenIsSafe="true"/>
+				  <uap:Logo>Assets\FileType-Video.png</uap:Logo>
+			  </uap:FileTypeAssociation>
+		  </uap:Extension>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="media-viewer-image">
+            <uap:SupportedFileTypes>
+              <uap:FileType ContentType="image/jpeg">.jpg</uap:FileType>
+              <uap:FileType ContentType="image/jpeg">.jpeg</uap:FileType>
+              <uap:FileType ContentType="image/png">.png</uap:FileType>
+              <uap:FileType ContentType="image/webp">.webp</uap:FileType>
+              <uap:FileType ContentType="image/bmp">.bmp</uap:FileType>
+              <uap:FileType ContentType="image/gif">.gif</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:EditFlags OpenIsSafe="true"/>
+            <uap:DisplayName>Image</uap:DisplayName>
+            <uap:Logo>Assets\FileType-Image.png</uap:Logo>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+		  <uap:Extension Category="windows.shareTarget">
+		  <uap:ShareTarget Description="Save Edits">
+		  <uap:SupportedFileTypes>
+		  <uap:FileType>.jpg</uap:FileType>
+		  <uap:FileType>.jpeg</uap:FileType>
+		  <uap:FileType>.png</uap:FileType>
+		  <uap:FileType>.webp</uap:FileType>
+		  </uap:SupportedFileTypes>
+		  </uap:ShareTarget>
+		  </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+	<rescap:Capability Name="graphicsCapture" />
+    <Capability Name="internetClientServer"/>
+    <Capability Name="internetClient"/>
+    <uap6:Capability Name="graphicsCapture"/>
+    <uap3:Capability Name="backgroundMediaPlayback"/>
+    <uap:Capability Name="objects3D"/>
+    <uap:Capability Name="musicLibrary"/>
+    <uap:Capability Name="picturesLibrary"/>
+    <Capability Name="privateNetworkClientServer"/>
+    <uap3:Capability Name="remoteSystem"/>
+    <uap:Capability Name="removableStorage"/>
+    <uap:Capability Name="videosLibrary"/>
+    <DeviceCapability Name="gazeInput"/>
+    <DeviceCapability Name="microphone"/>
+    <DeviceCapability Name="proximity"/>
+    <DeviceCapability Name="webcam"/>
+  </Capabilities>
+</Package>

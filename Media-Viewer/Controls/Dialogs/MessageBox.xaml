@@ -1,0 +1,20 @@
+<!-- Copyright (c) Microsoft Corporation and Contributors. -->
+<!-- Licensed under the MIT License. -->
+
+<ContentDialog
+    x:Class="MediaStudio.Controls.Dialogs.MessageBoxContent"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Controls.Dialogs"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Style="{StaticResource DefaultContentDialogStyle}"
+    mc:Ignorable="d">
+
+    <TextBlock x:Name="Message" x:FieldModifier="public"
+               TextWrapping="WrapWholeWords"
+               VerticalAlignment="Stretch"
+               HorizontalAlignment="Stretch"      
+               IsTextSelectionEnabled="True"/>
+    
+</ContentDialog>

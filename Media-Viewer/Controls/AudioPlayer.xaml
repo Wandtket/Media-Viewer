@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaStudio.Controls.AudioPlayer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid
+        Margin="20"
+        Width="600">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Audio Player Controls -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Play/Pause Button -->
+            <Button
+                x:Name="PlayPauseButton"
+                Grid.Column="0"
+                Margin="0,0,10,0"
+                Width="40"
+                Height="40"
+                Click="PlayPauseButton_Click">
+                <FontIcon Glyph="&#xE768;" FontSize="16"/>
+            </Button>
+
+            <!-- Time Display -->
+            <TextBlock
+                x:Name="CurrentTimeText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Margin="0,0,10,0"
+                MinWidth="40"
+                Text="00:00"/>
+
+            <!-- Progress Slider -->
+            <Slider
+                x:Name="ProgressSlider"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch"
+                    Minimum="0"
+                    Maximum="100"
+                    Value="0"                  
+                    ValueChanged="ProgressSlider_ValueChanged"/>
+
+            <!-- Total Time Display -->
+            <TextBlock
+                x:Name="TotalTimeText"
+                Grid.Column="3"
+                VerticalAlignment="Center"
+                Margin="10,0,0,0"
+                MinWidth="40"
+                Text="00:00"/>
+
+            <!-- Loop Toggle Button -->
+            <Button
+                x:Name="LoopButton"
+                Grid.Column="4"
+                Margin="10,0,0,0"
+                Width="40"
+                Height="40"
+                Click="LoopButton_Click">
+                <FontIcon x:Name="LoopIcon" Glyph="&#xE8EE;" FontSize="16"/>
+            </Button>
+        </Grid>
+
+        <!-- File Picker Button -->
+        <Button
+            Grid.Row="1"
+            Margin="0,20,0,0"
+            Content="Select Audio File"
+            Click="SelectFileButton_Click"/>
+    </Grid>
+</UserControl>

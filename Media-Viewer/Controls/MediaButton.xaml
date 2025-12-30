@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaStudio.Controls.MediaButton"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Visibility="Collapsed"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <Storyboard x:Name="PulseAnimation" Completed="PulseAnimation_Completed">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PlayPauseGrid" 
+                                     Storyboard.TargetProperty="Opacity">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.15" Value="1.0"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="0"/>
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+    </UserControl.Resources>
+    
+    <Grid x:Name="PlayPauseGrid" 
+            Background="{ThemeResource MainAccrylic}"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Center"
+            Opacity="0" 
+            Padding="25"
+            CornerRadius="20">
+
+        <FontIcon x:Name="PlayPauseIcon" 
+            Glyph="&#xE102;" 
+            FontFamily="Segoe MDL2 Assets"
+            FontSize="80"/>
+    </Grid>
+</UserControl>

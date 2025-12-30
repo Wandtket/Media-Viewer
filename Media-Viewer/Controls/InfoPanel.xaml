@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaStudio.Controls.InfoPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:MediaStudio.Studio.Models"
+    xmlns:converters="using:MediaStudio.Converters"
+
+    mc:Ignorable="d">
+
+    <UserControl.DataContext>
+        <models:MediaProperties/>
+    </UserControl.DataContext>
+
+    <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
+    
+    <ScrollViewer x:Name="FileInfoGrid"                              
+              Margin="0,45,0,0">
+
+        <StackPanel Padding="20,15,10,10"
+                CornerRadius="10"
+                Spacing="20"
+                Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource MainColor}" 
+                BorderThickness="1,1,0,0">
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="InfoTitle" Text="Info" FontSize="24" Grid.Column="0"/>
+                
+                <Button x:Name="DismissInfoBoxButton"
+                    FontWeight="SemiBold"
+                    Background="Transparent" 
+                    BorderThickness="0" 
+                    Opacity=".5"
+                    Grid.Column="1"
+                    Click="DismissInfoBoxButton_Click">
+                    <Button.Content>
+                        <FontIcon Glyph="&#xE624;" FontSize="20"/>
+                    </Button.Content>
+                </Button>
+            </Grid>
+
+            <!--File Path-->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <SymbolIcon Symbol="Pictures" 
+                  HorizontalAlignment="Left"
+                  ToolTipService.ToolTip="File Name"/>
+
+                <TextBox x:Name="InfoFileName" 
+                     Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"
+                     Grid.Column="1" 
+                     Margin="10,0,10,0"/>
+            </Grid>
+
+            <!--Date Modified-->
+            <Grid >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <SymbolIcon Symbol="Calendar"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="Date Modified"/>
+
+                <DatePicker x:Name="InfoDateModified" 
+                        Date="{Binding DateModified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Grid.Column="1" Margin="10,0,10,0" 
+                        HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <!--Time Modified-->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <SymbolIcon Symbol="Clock"
+                  HorizontalAlignment="Left"
+                  ToolTipService.ToolTip="Time Taken"/>
+
+                <TimePicker x:Name="InfoTimeModified" 
+                        Time="{Binding TimeModified, UpdateSourceTrigger=PropertyChanged}" 
+                        Grid.Column="1" Margin="10,0,10,0" 
+                        HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <!--Comments-->
+            <Grid Visibility="{Binding MetaDataEditable, 
+                Converter={StaticResource BoolToVisibilityConverter}}">
+                
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <SymbolIcon Symbol="AlignLeft"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="Comments"/>
+
+                <RichEditBox x:Name="CommentBox"
+                         Grid.Column="1" Margin="10,0,10,0"                                               
+                         HorizontalAlignment="Stretch" 
+                         PlaceholderText="Add comments"
+                         DataContextChanged="RichEditBox_DataContextChanged"
+                         LostFocus="RichEditBox_LostFocus"                                             
+                         DataContext="{Binding Comments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            </Grid>
+
+            <!--Rating-->
+            <Grid Visibility="{Binding MetaDataEditable, 
+                Converter={StaticResource BoolToVisibilityConverter}}">
+                
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="auto"/>
+                </Grid.ColumnDefinitions>
+
+                <SymbolIcon Symbol="LikeDislike"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="File Rating"/>
+
+
+                <RatingControl Grid.Column="1" Margin="15,0,10,0"                                               
+                         HorizontalAlignment="Left"
+                         Caption="File Rating"
+                         DataContextChanged="RatingControl_DataContextChanged"
+                         ValueChanged="RatingControl_ValueChanged"
+                         DataContext="{Binding Rating, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    Background="Transparent"
+                    Grid.Column="2" Margin="10,0,10,0"
+                    ToolTipService.ToolTip="Add to Favorites">
+
+                    <ToggleButton.Content>
+
+                        <FontIcon Glyph="&#xEB51;" />
+                    </ToggleButton.Content>
+                </ToggleButton>
+
+
+            </Grid>
+
+            <!--Media Properties-->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Glyph="&#xE946;"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="Media Properties"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0"/>
+
+                <StackPanel Grid.Column="1" Margin="10,0,10,0" Spacing="5">
+                    <StackPanel.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="IsTextSelectionEnabled" Value="True"/>
+                        </Style>
+                    </StackPanel.Resources>
+                    <TextBlock Text="Size Info"/>
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <TextBlock x:Name="InfoFileResolution" 
+                               Text="{Binding Resolution, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock x:Name="InfoFileAspectRatio" 
+                               Text="{Binding AspectRatio, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock x:Name="InfoFileSize" 
+                               Text="{Binding Size, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock x:Name="InfoFileDPI" 
+                               Text="{Binding DPI, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock x:Name="InfoFileBit" 
+                               Text="{Binding BitDepth, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <!--Source-->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Glyph="&#xE71B;"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="Source"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0"/>
+
+                <StackPanel Grid.Column="1" Margin="10,0,10,0" Spacing="5">
+                    <StackPanel.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="IsTextSelectionEnabled" Value="True"/>
+                        </Style>
+                    </StackPanel.Resources>
+                    <TextBlock Text="Source"/>
+                    <TextBlock x:Name="InfoSource" 
+                       Text="{Binding Source, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+            </Grid>
+
+            <!--Full File Path-->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Glyph="&#xED25;"
+                      HorizontalAlignment="Left"
+                      ToolTipService.ToolTip="File Path"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0"/>
+
+                <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                    <StackPanel.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="IsTextSelectionEnabled" Value="True"/>
+                        </Style>
+                    </StackPanel.Resources>
+
+                    <TextBlock Text="File Path"/>
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="InfoFilePath"
+                           Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"
+                           TextWrapping="Wrap"
+                           Foreground="Orange"/>
+
+                        <Button x:Name="CopyPath"
+                                Tapped="CopyPath_Tapped"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                Grid.Column="1">
+                            <SymbolIcon Symbol="Copy"/>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+    
+</UserControl>

@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="MediaStudio.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaStudio.Pages"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:Converters="using:MediaStudio.Converters"
+    xmlns:Enums="using:MediaStudio.Studio.Enums"
+    xmlns:MS="using:MediaStudio.Pages"
+    Loaded="Page_Loaded"
+    NavigationCacheMode="Required">
+
+    <Page.Resources>
+        <Style TargetType="controls:SettingsCard">
+            <Setter Target="Padding" Value="60,0,20,0"/>
+        </Style>
+        <Converters:ToggleToBoolConverter x:Key="ToggleToBoolConverter"/>
+    </Page.Resources>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Visible">
+        <StackPanel MinWidth="600" HorizontalAlignment="Center">
+
+            <!--General-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="General" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+                    <controls:SettingsCard Header="Auto-Hide UI"    
+                                           Description="Hover your mouse towards the top of the window to reveal"
+                                           IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8A1;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ToggleSwitch IsOn="{x:Bind MS:Settings.Current.AutoHideUI, Mode=TwoWay}" OnContent="On" OffContent="Off" />
+
+                    </controls:SettingsCard>
+
+                </StackPanel>
+            </controls:HeaderedContentControl>
+
+            <!--Playback-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Playback" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard Header="Auto-Play Videos"    
+                           Description="Videos will auto-play when the application launches."
+                           IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE768;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ToggleSwitch IsOn="{x:Bind MS:Settings.Current.AutoPlayVideos, 
+                                Mode=TwoWay, 
+                                UpdateSourceTrigger=PropertyChanged,
+                                Converter={StaticResource ToggleToBoolConverter}}"
+                                OnContent="On" OffContent="Off"/>
+                    </controls:SettingsCard>
+
+
+                    <controls:SettingsCard Header="Remember Playback Position"    
+                               Description="When closing the app playback position will be saved upon re-opening the file."
+                               IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8EE;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ToggleSwitch IsOn="{x:Bind MS:Settings.Current.RememberPlaybackPosition, 
+                                Mode=TwoWay, 
+                                UpdateSourceTrigger=PropertyChanged,
+                                Converter={StaticResource ToggleToBoolConverter}}"
+                                OnContent="On" OffContent="Off"/>
+                    </controls:SettingsCard>
+
+
+                    <controls:SettingsCard Header="Repeat Mode"    
+                               Description="Changes the repeat behavior for videos"
+                               IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8EE;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ComboBox ItemsSource="{x:Bind Enums:RepeatModes.List}" 
+                                  SelectedItem="{x:Bind MS:Settings.Current.RepeatMode}"
+                                  DisplayMemberPath="Key" 
+                                  SelectedValuePath="Value"
+                                  Loaded="RepeatMode_Loaded"
+                                  SelectionChanged="RepeatMode_SelectionChanged"/>
+                    </controls:SettingsCard>
+
+                </StackPanel>
+            </controls:HeaderedContentControl>
+
+            
+            <!--Theme-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Theme" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+                    <controls:SettingsCard Header="Backdrop"    
+                               Description="The type of background behind media (Requires Restart)"
+                               IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE771;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ComboBox ItemsSource="{x:Bind Enums:Backdrops.List}" 
+                                  SelectedItem="{x:Bind MS:Settings.Current.Backdrop}"
+                                  SelectionChanged="Backdrop_SelectionChanged"/>
+                    </controls:SettingsCard>
+
+                </StackPanel>
+            </controls:HeaderedContentControl>
+
+            <!--Sorting-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Sorting" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+                    <controls:SettingsCard Header="Sort By"    
+                               Description="The order the media will be presented"
+                               IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8BC;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ComboBox ItemsSource="{x:Bind Enums:SortBys.List}" 
+                                  DisplayMemberPath="Key" 
+                                  SelectedValuePath="Value"
+                                  Loaded="SortBy_Loaded"
+                                  SelectionChanged="SortBy_SelectionChanged"/>
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard Header="Sort Direction"    
+                               Description="The default direction the media will be presented"
+                               IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8CB;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ComboBox ItemsSource="{x:Bind Enums:SortDirections.List}"
+                                  SelectedItem="{x:Bind MS:Settings.Current.SortDirectionPreference}"
+                                  SelectionChanged="SortDirection_SelectionChanged"/>
+                    </controls:SettingsCard>
+
+                </StackPanel>
+            </controls:HeaderedContentControl>
+
+            <!--Editing-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Editing" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard Header="Show Edit Button"    
+                                           Description="Toggle visibility of the edit button"
+                                           IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE70F;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ToggleSwitch IsOn="{x:Bind MS:Settings.Current.EditEnabled, Mode=TwoWay}" OnContent="On" OffContent="Off" />
+
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="ImageEditorSettingsCard"
+                                           Header="Photo Editor"                                              
+                                           Description="The program the edit button will default to for photos"
+                                           IsEnabled="True" Padding="20,0,20,0">
+                        
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xEB9F;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectImageEditingProgram_Click"
+                                ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                                    ToolTipService.ToolTip="Clear Default"
+                                    Click="ClearImageEditor_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                            
+                        </StackPanel>
+                        
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="GifEditorSettingsCard"
+                                           Header="Gif Editor"    
+                                           Description="The program the edit button will default to for Gifs"
+                                           IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xF4A9;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectGIFEditingProgram_Click"
+                                ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                                    ToolTipService.ToolTip="Clear Default"
+                                    Click="ClearGifEditor_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+                        
+
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="AudioEditorSettingsCard"
+                                           Header="Audio Editor"    
+                                           Description="The program the edit button will default to for audio"
+                                           IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8D6;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectAudioEditingProgram_Click"
+                                ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                                    ToolTipService.ToolTip="Clear Default"
+                                    Click="ClearAudioEditor_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="VideoEditorSettingsCard"
+                                           Header="Video Editor"    
+                                           Description="The program the edit button will default to for Videos"
+                                           IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE714;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectVideoEditingProgram_Click"
+                                ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                                    ToolTipService.ToolTip="Clear Default"
+                                    Click="ClearVideoEditor_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+            </controls:HeaderedContentControl>
+
+            <!--Miscellaneous-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Miscellaneous" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard Header="Promotion"    
+                                           Description="Toggle the promotion items in the navigation pane."
+                                           IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xEC32;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <ToggleSwitch IsOn="{x:Bind MS:Settings.Current.Promotion, Mode=TwoWay}" OnContent="On" OffContent="Off" />
+
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard Header="Application Resources"    
+                                           Description="Open Application Resources for advanced troubleshooting."
+                                           IsEnabled="True" Padding="20,0,20,0">
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xF180;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Orientation="Vertical" Spacing="5">
+                            <Button Content="App Folder" Width="100" Click="AppFolder_Click" />
+                            <Button Content="Local Folder" Width="100" Click="LocalFolder_Click" />
+                        </StackPanel>
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+            </controls:HeaderedContentControl>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>
