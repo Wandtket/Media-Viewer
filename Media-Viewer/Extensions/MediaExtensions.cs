@@ -1,4 +1,5 @@
-﻿using MediaViewer.Enums;
+﻿using FFMpegCore;
+using MediaViewer.Enums;
 using MediaViewer.Models;
 using MediaViewer.Pages;
 using Microsoft.UI;
@@ -9,11 +10,95 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace MediaViewer.Extensions
 {
+
+
+    public static class MediaExtensions
+    {
+
+        public static async void OpenFile()
+        {
+
+        }
+
+
+        /// <summary>
+        /// Extracts chapters from a video file using FFMpegCore.
+        /// </summary>
+        public static async Task<List<ChapterInfo>> ExtractChaptersAsync(string videoPath)
+        {
+            var chapters = new List<ChapterInfo>();
+
+            try
+            {
+                // Use FFProbe to analyze the video file
+                var mediaInfo = await FFProbe.AnalyseAsync(videoPath);
+
+                if (mediaInfo.Chapters != null && mediaInfo.Chapters.Any())
+                {
+                    foreach (var chapter in mediaInfo.Chapters)
+                    {
+                        var chapterInfo = new ChapterInfo
+                        {
+                            StartTime = chapter.Start,
+                            Title = !string.IsNullOrWhiteSpace(chapter.Title)
+                                ? chapter.Title
+                                : $"Chapter {chapters.Count + 1}"
+                        };
+
+                        chapters.Add(chapterInfo);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error extracting chapters: {ex.Message}");
+            }
+
+            return chapters;
+        }
+
+        public static async Task<TimeSpan> GetVideoDurationAsync(string videoPath)
+        {
+            try
+            {
+                var mediaInfo = await FFProbe.AnalyseAsync(videoPath);
+                return mediaInfo.Duration;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting video duration: {ex.Message}");
+                return TimeSpan.Zero;
+            }
+        }
+
+
+
+        public static void RunTopazVideoAI(string inputPath)
+        {
+            var topazExePath = @"C:\Program Files\Topaz Labs LLC\Topaz Video AI\Topaz Video AI.exe";
+            var args = $"\"{inputPath}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = topazExePath,
+                Arguments = args,
+                UseShellExecute = true, // Show the Topaz GUI
+                CreateNoWindow = false
+            };
+
+            var process = new Process { StartInfo = psi };
+            process.Start();
+        }
+
+
+    }
 
     public sealed class CustomMediaTransportControls : MediaTransportControls
     {
@@ -432,4 +517,8 @@ namespace MediaViewer.Extensions
             Liked?.Invoke(this, EventArgs.Empty);
         }
     }
+
+
+
+
 }
