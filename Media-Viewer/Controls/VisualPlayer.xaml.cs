@@ -200,7 +200,7 @@ public sealed partial class VisualPlayer : UserControl
         var mediaInfo = await FFProbe.AnalyseAsync(source.Path);
         VideoFrameRate = mediaInfo.PrimaryVideoStream?.FrameRate ?? 30.0;
 
-        var chapters = await FFmpegExtensions.ExtractChaptersAsync(source.Path);
+        var chapters = await MediaExtensions.ExtractChaptersAsync(source.Path);
         if (chapters.Count > 0)
         {
             var duration = VideoElement.MediaPlayer.PlaybackSession.NaturalDuration;
@@ -664,19 +664,12 @@ public sealed partial class VisualPlayer : UserControl
     }
 
 
-    private void VisualPlayerPresenter_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    private async void VisualPlayerPresenter_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         var s = (FrameworkElement)sender;
         var d = s.DataContext;
 
         MenuFlyout Flyout = new MenuFlyout();
-        MenuFlyoutSeparator separator1 = new MenuFlyoutSeparator();
-        MenuFlyoutSeparator separator2 = new MenuFlyoutSeparator();
-        MenuFlyoutSeparator separator3 = new MenuFlyoutSeparator();
-        MenuFlyoutSeparator separator4 = new MenuFlyoutSeparator();
-        MenuFlyoutSeparator separator5 = new MenuFlyoutSeparator();
-        MenuFlyoutSeparator separator6 = new MenuFlyoutSeparator();
-
 
         MenuFlyoutItem ShareItem = new MenuFlyoutItem { Text = $"Share", Icon = new SymbolIcon(Symbol.Share) };
         ShareItem.Click += async (_, __) => await ShareCurrentFrame();
@@ -685,23 +678,41 @@ public sealed partial class VisualPlayer : UserControl
         MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
         MenuFlyoutItem EditVideoItem = new MenuFlyoutItem { Text = $"Edit Video", Icon = new FontIcon() { Glyph = "\uE714" } };
         MenuFlyoutItem EditFrameItem = new MenuFlyoutItem { Text = $"Edit Frame", Icon = new SymbolIcon(Symbol.Edit) };
-        MenuFlyoutSeparator separatorConvert = new MenuFlyoutSeparator();
         MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
         MenuFlyoutItem ConvertToVideoItem = new MenuFlyoutItem { Text = $"Convert to Video", Icon = new FontIcon() { Glyph = "\uEA0C" } };
-        MenuFlyoutSeparator separatorConvert2 = new MenuFlyoutSeparator();
-        MenuFlyoutItem UpscaleVideoItem = new MenuFlyoutItem { Text = $"Upscale Video", Icon = new FontIcon() { Glyph = "\uE61F" } };
-        MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Frame", Icon = new FontIcon() { Glyph = "\uE61F" } };
 
 
         EditFrameItem.Click += async (_, __) => await EditCurrentFrame();
         EditItem.Items.Add(EditVideoItem);
         EditItem.Items.Add(EditFrameItem);
-        EditItem.Items.Add(separatorConvert);
+        EditItem.Items.Add(new MenuFlyoutSeparator());
         EditItem.Items.Add(ConvertToGifItem);
         EditItem.Items.Add(ConvertToVideoItem);
-        EditItem.Items.Add(separatorConvert2);
-        EditItem.Items.Add(UpscaleVideoItem);
-        EditItem.Items.Add(UpscaleFrameItem);
+        EditItem.Items.Add(new MenuFlyoutSeparator());
+
+        //Video Converter
+        if (!string.IsNullOrEmpty(Settings.Current.VideoConverterPath))
+        {
+            MenuFlyoutItem ConvertVideoItem = new MenuFlyoutItem { Text = $"Convert Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath) };
+            ConvertVideoItem.Click += async (_, __) => UpscaleVideo();
+            EditItem.Items.Add(ConvertVideoItem);
+            EditItem.Items.Add(new MenuFlyoutSeparator());
+        }
+
+        //Upscaler
+        if (!string.IsNullOrEmpty(Settings.Current.VideoUpscalerPath))
+        {
+            MenuFlyoutItem UpscaleVideoItem = new MenuFlyoutItem { Text = $"Upscale Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoUpscalerPath) };
+            UpscaleVideoItem.Click += async (_, __) => UpscaleVideo();
+            EditItem.Items.Add(UpscaleVideoItem);
+        }
+         
+        if (!string.IsNullOrEmpty(Settings.Current.ImageUpscalerPath))
+        {
+            MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Frame", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
+            UpscaleFrameItem.Click += async (_, __) => UpscaleImage();
+            EditItem.Items.Add(UpscaleFrameItem);
+        }
 
 
         MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Frame As", Icon = new SymbolIcon(Symbol.SaveLocal) };
@@ -741,29 +752,29 @@ public sealed partial class VisualPlayer : UserControl
 
         Flyout.Items.Add(ShareItem);
 
-        Flyout.Items.Add(separator1);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
         Flyout.Items.Add(OpenWithItem);
         Flyout.Items.Add(SaveAsItem);
 
-        Flyout.Items.Add(separator2);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
         Flyout.Items.Add(EditItem);
 
-        Flyout.Items.Add(separator3);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
         Flyout.Items.Add(CopyItem);
 
-        Flyout.Items.Add(separator4);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
         Flyout.Items.Add(OpenFileExplorerItem);
 
-        Flyout.Items.Add(separator5);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
         Flyout.Items.Add(SetAsItem);
         Flyout.Items.Add(FitItem);
 
-        Flyout.Items.Add(separator6);
+        Flyout.Items.Add(new MenuFlyoutSeparator());
         Flyout.Items.Add(ReverseImageSearchItem);
         Flyout.Items.Add(FileInformationItem);
 
@@ -2081,7 +2092,26 @@ public sealed partial class VisualPlayer : UserControl
 
     #endregion
 
+    #region Editing
+    private void UpscaleVideo()
+    {
+        if (VideoElement.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+        if (VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter &&
+            presenter.MediaPlayer != null)
+        {
+            MediaExtensions.RunTopazVideoAI(CurrentFile.Path);
+        }
+    }
 
+    private void UpscaleImage()
+    {
+
+    }
+
+    #endregion
 
     private void ImageElement_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
     {
