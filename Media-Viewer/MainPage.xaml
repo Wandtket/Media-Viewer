@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:converters="using:MediaViewer.Converters"
     xmlns:MS="using:MediaViewer.Pages" 
-    xmlns:models="using:MediaViewer.Studio.Models" 
+    xmlns:models="using:MediaViewer.Models" 
     xmlns:controls="using:MediaViewer.Controls"   
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls" 
     xmlns:interactivity="using:Microsoft.Xaml.Interactivity" 
