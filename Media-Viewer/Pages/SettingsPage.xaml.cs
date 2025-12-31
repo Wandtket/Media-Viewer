@@ -54,9 +54,7 @@ namespace MediaViewer.Pages
                     var Thumbnail = await Files.GetAppIconAsync(Settings.Current.ImageEditorPath);
                     var DisplayName = Files.GetAppDisplayName(Settings.Current.ImageEditorPath);
 
-                    ImageIcon Icon = new();
-                    Icon.Source = Thumbnail;
-                    ImageEditorSettingsCard.HeaderIcon = Icon;
+                    ImageEditorSettingsCard.HeaderIcon = Thumbnail;
                     ImageEditorSettingsCard.Description = DisplayName;
                 }
                 else
@@ -73,9 +71,7 @@ namespace MediaViewer.Pages
                     var Thumbnail = await Files.GetAppIconAsync(Settings.Current.GifEditorPath);
                     var DisplayName = Files.GetAppDisplayName(Settings.Current.GifEditorPath);
 
-                    ImageIcon Icon = new();
-                    Icon.Source = Thumbnail;
-                    GifEditorSettingsCard.HeaderIcon = Icon;
+                    GifEditorSettingsCard.HeaderIcon = Thumbnail;
                     GifEditorSettingsCard.Description = DisplayName;
                 }
                 else
@@ -92,9 +88,7 @@ namespace MediaViewer.Pages
                     var Thumbnail = await Files.GetAppIconAsync(Settings.Current.AudioEditorPath);
                     var DisplayName = Files.GetAppDisplayName(Settings.Current.AudioEditorPath);
 
-                    ImageIcon Icon = new();
-                    Icon.Source = Thumbnail;
-                    AudioEditorSettingsCard.HeaderIcon = Icon;
+                    AudioEditorSettingsCard.HeaderIcon = Thumbnail;
                     AudioEditorSettingsCard.Description = DisplayName;
                 }
                 else
@@ -111,9 +105,7 @@ namespace MediaViewer.Pages
                     var Thumbnail = await Files.GetAppIconAsync(Settings.Current.VideoEditorPath);
                     var DisplayName = Files.GetAppDisplayName(Settings.Current.VideoEditorPath);
 
-                    ImageIcon Icon = new();
-                    Icon.Source = Thumbnail;
-                    VideoEditorSettingsCard.HeaderIcon = Icon;
+                    VideoEditorSettingsCard.HeaderIcon = Thumbnail;
                     VideoEditorSettingsCard.Description = DisplayName;
                 }
                 else
@@ -122,6 +114,56 @@ namespace MediaViewer.Pages
                 }
             }
 
+            //Load Video Converter Icon & Display Name
+            if (!string.IsNullOrEmpty(Settings.Current.VideoConverterPath))
+            {
+                if (File.Exists(Settings.Current.VideoConverterPath))
+                {
+                    var Thumbnail = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath);
+                    var DisplayName = Files.GetAppDisplayName(Settings.Current.VideoConverterPath);
+
+                    VideoConverterSettingsCard.HeaderIcon = Thumbnail;
+                    VideoConverterSettingsCard.Description = DisplayName;
+                }
+                else
+                {
+                    Settings.Current.VideoConverterPath = "";
+                }
+            }
+
+            //Load Video Upscaler Icon & Display Name
+            if (!string.IsNullOrEmpty(Settings.Current.VideoUpscalerPath))
+            {
+                if (File.Exists(Settings.Current.VideoUpscalerPath))
+                {
+                    var Thumbnail = await Files.GetAppIconAsync(Settings.Current.VideoUpscalerPath);
+                    var DisplayName = Files.GetAppDisplayName(Settings.Current.VideoUpscalerPath);
+
+                    VideoUpscalerSettingsCard.HeaderIcon = Thumbnail;
+                    VideoUpscalerSettingsCard.Description = DisplayName;
+                }
+                else
+                {
+                    Settings.Current.VideoUpscalerPath = "";
+                }
+            }
+
+            //Load Image Upscaler Icon & Display Name
+            if (!string.IsNullOrEmpty(Settings.Current.VideoUpscalerPath))
+            {
+                if (File.Exists(Settings.Current.VideoUpscalerPath))
+                {
+                    var Thumbnail = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath);
+                    var DisplayName = Files.GetAppDisplayName(Settings.Current.ImageUpscalerPath);
+
+                    ImageUpscalerSettingsCard.HeaderIcon = Thumbnail;
+                    ImageUpscalerSettingsCard.Description = DisplayName;
+                }
+                else
+                {
+                    Settings.Current.ImageUpscalerPath = "";
+                }
+            }
         }
 
         private async void AppFolder_Click(object sender, RoutedEventArgs e)
@@ -149,10 +191,7 @@ namespace MediaViewer.Pages
                 var image = await Files.GetAppIconAsync(File.Path);
                 var displayname = Files.GetAppDisplayName(File.Path);
 
-                ImageIcon icon = new ImageIcon();
-                icon.Source = image;
-
-                ImageEditorSettingsCard.HeaderIcon = icon;
+                ImageEditorSettingsCard.HeaderIcon = image;
                 ImageEditorSettingsCard.Description = displayname;
 
                 Settings.Current.ImageEditorPath = File.Path;
@@ -185,10 +224,7 @@ namespace MediaViewer.Pages
                 var image = await Files.GetAppIconAsync(File.Path);
                 var displayname = Files.GetAppDisplayName(File.Path);
 
-                ImageIcon icon = new ImageIcon();
-                icon.Source = image;
-
-                GifEditorSettingsCard.HeaderIcon = icon;
+                GifEditorSettingsCard.HeaderIcon = image;
                 GifEditorSettingsCard.Description = displayname;
 
                 Settings.Current.GifEditorPath = File.Path;
@@ -222,10 +258,7 @@ namespace MediaViewer.Pages
                 var image = await Files.GetAppIconAsync(File.Path);
                 var displayname = Files.GetAppDisplayName(File.Path);
 
-                ImageIcon icon = new ImageIcon();
-                icon.Source = image;
-
-                AudioEditorSettingsCard.HeaderIcon = icon;
+                AudioEditorSettingsCard.HeaderIcon = image;
                 AudioEditorSettingsCard.Description = displayname;
 
                 Settings.Current.AudioEditorPath = File.Path;
@@ -258,10 +291,7 @@ namespace MediaViewer.Pages
                 var image = await Files.GetAppIconAsync(File.Path);
                 var displayname = Files.GetAppDisplayName(File.Path);
 
-                ImageIcon icon = new ImageIcon();
-                icon.Source = image;
-
-                VideoEditorSettingsCard.HeaderIcon = icon;
+                VideoEditorSettingsCard.HeaderIcon = image;
                 VideoEditorSettingsCard.Description = displayname;
 
                 Settings.Current.VideoEditorPath = File.Path;
@@ -283,6 +313,111 @@ namespace MediaViewer.Pages
                 VideoEditorSettingsCard.Description = "The program the edit button will default to for Videos";
             }
         }
+
+
+        private async void SelectVideoConvertProgram_Click(object sender, RoutedEventArgs e)
+        {
+            var File = await Files.SelectExecutable();
+
+            if (File != null)
+            {
+                var image = await Files.GetAppIconAsync(File.Path);
+                var displayname = Files.GetAppDisplayName(File.Path);
+
+                VideoConverterSettingsCard.HeaderIcon = image;
+                VideoConverterSettingsCard.Description = displayname;
+
+                Settings.Current.VideoConverterPath = File.Path;
+            }
+        }
+
+        private async void ClearVideoConvert_Click(object sender, RoutedEventArgs e)
+        {
+            var Result = await ConfirmBox.Show("This will hide the option to convert a video.",
+                "Clear Video Converter?", "Clear", "Cancel");
+
+            if (Result == ContentDialogResult.Primary)
+            {
+                Settings.Current.VideoConverterPath = "";
+                FontIcon icon = new FontIcon();
+                icon.Glyph = "\uE9A1";
+                icon.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets");
+                VideoConverterSettingsCard.HeaderIcon = icon;
+                VideoConverterSettingsCard.Description = "The program the convert button will default to for Videos";
+            }
+        }
+
+
+        private async void SelectVideoUpscalerProgram_Click(object sender, RoutedEventArgs e)
+        {
+            var File = await Files.SelectExecutable();
+
+            if (File != null)
+            {
+                var image = await Files.GetAppIconAsync(File.Path);
+                var displayname = Files.GetAppDisplayName(File.Path);
+
+                VideoUpscalerSettingsCard.HeaderIcon = image;
+                VideoUpscalerSettingsCard.Description = displayname;
+
+                Settings.Current.VideoUpscalerPath = File.Path;
+            }
+        }
+
+        private async void ClearVideoUpscaler_Click(object sender, RoutedEventArgs e)
+        {
+            var Result = await ConfirmBox.Show("This will hide the option to upscale a video.",
+                "Clear Video Upscaler?", "Clear", "Cancel");
+
+            if (Result == ContentDialogResult.Primary)
+            {
+                Settings.Current.VideoUpscalerPath = "";
+                FontIcon icon = new FontIcon();
+                icon.Glyph = "\uE61F";
+                icon.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets");
+                VideoUpscalerSettingsCard.HeaderIcon = icon;
+                VideoUpscalerSettingsCard.Description = "The program the upscaler button will default to for Videos";
+            }
+        }
+
+
+        private async void SelectImageUpscalerProgram_Click(object sender, RoutedEventArgs e)
+        {
+            var File = await Files.SelectExecutable();
+
+            if (File != null)
+            {
+                var image = await Files.GetAppIconAsync(File.Path);
+                var displayname = Files.GetAppDisplayName(File.Path);
+
+                ImageUpscalerSettingsCard.HeaderIcon = image;
+                ImageUpscalerSettingsCard.Description = displayname;
+
+                Settings.Current.ImageUpscalerPath = File.Path;
+            }
+        }
+
+        private async void ClearImageUpscaler_Click(object sender, RoutedEventArgs e)
+        {
+            var Result = await ConfirmBox.Show("This will hide the option to upscale an image.",
+                "Clear Image Upscaler?", "Clear", "Cancel");
+
+            if (Result == ContentDialogResult.Primary)
+            {
+                Settings.Current.ImageUpscalerPath = "";
+                FontIcon icon = new FontIcon();
+                icon.Glyph = "\uE61F";
+                icon.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets");
+                ImageUpscalerSettingsCard.HeaderIcon = icon;
+                ImageUpscalerSettingsCard.Description = "The program the upscaler button will default to for Images";
+            }
+        }
+
+
+
+
+
+
 
         private void SortBy_Loaded(object sender, RoutedEventArgs e)
         {
@@ -436,6 +571,28 @@ namespace MediaViewer.Pages
             set { localSettings.Values[videoEditorPath] = value; OnPropertyChanged("VideoEditorPath"); }
         }
         private string videoEditorPath = "videoEditorPath";
+
+        public string VideoConverterPath
+        {
+            get { return localSettings.Values[videoConverterPath] as string ?? ""; }
+            set { localSettings.Values[videoConverterPath] = value; OnPropertyChanged("VideoConverterPath"); }
+        }
+        private string videoConverterPath = "videoConverterPath";
+
+
+        public string VideoUpscalerPath
+        {
+            get { return localSettings.Values[videoUpscalerPath] as string ?? ""; }
+            set { localSettings.Values[videoUpscalerPath] = value; OnPropertyChanged("VideoUpscalerPath"); }
+        }
+        private string videoUpscalerPath = "videoUpscalerPath";
+
+        public string ImageUpscalerPath
+        {
+            get { return localSettings.Values[imageUpscalerPath] as string ?? ""; }
+            set { localSettings.Values[imageUpscalerPath] = value; OnPropertyChanged("ImageUpscalerPath"); }
+        }
+        private string imageUpscalerPath = "imageUpscalerPath";
 
 
 

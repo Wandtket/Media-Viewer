@@ -282,6 +282,102 @@
 
             </controls:HeaderedContentControl>
 
+            <!--Converting-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Converting" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard x:Name="VideoConverterSettingsCard"
+                                           Header="Video Converter"    
+                                           Description="The program the convert option will default to for Videos"
+                                           IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE9A1;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectVideoConvertProgram_Click"
+                                ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                                    ToolTipService.ToolTip="Clear Default"
+                                    Click="ClearVideoConvert_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+            </controls:HeaderedContentControl>
+
+            <!--Upscaling-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Upscaling" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard x:Name="VideoUpscalerSettingsCard"
+                               Header="Video Upscaler"    
+                               Description="The program the upscaler option will default to for Videos"
+                               IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE61F;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectVideoUpscalerProgram_Click"
+                    ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                        ToolTipService.ToolTip="Clear Default"
+                        Click="ClearVideoUpscaler_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                    <controls:SettingsCard x:Name="ImageUpscalerSettingsCard"
+                               Header="Image Upscaler"    
+                               Description="The program the upscaler option will default to for Images"
+                               IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE61F;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+                            <Button Click="SelectImageUpscalerProgram_Click"
+                    ToolTipService.ToolTip="Select Program">
+                                <FontIcon Glyph="&#xE7AC;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+
+                            <Button 
+                        ToolTipService.ToolTip="Clear Default"
+                        Click="ClearImageUpscaler_Click">
+                                <FontIcon Glyph="&#xE738;" FontFamily="Segoe MDL2 Assets"/>
+                            </Button>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+            </controls:HeaderedContentControl>
+
             <!--Miscellaneous-->
             <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
                 <controls:HeaderedContentControl.Header>
