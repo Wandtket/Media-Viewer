@@ -1,6 +1,7 @@
 ﻿using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
@@ -65,15 +66,21 @@ namespace MediaViewer.Extensions
             return displayName;
         }
 
-        public static async Task<BitmapImage> GetAppIconAsync(string FilePath)
+
+        public static async Task<ImageIcon> GetAppIconAsync(string FilePath)
         {
             var exe = await StorageFile.GetFileFromPathAsync(FilePath);
             var thumb = await exe.GetThumbnailAsync(ThumbnailMode.SingleItem, 64, ThumbnailOptions.UseCurrentScale);
 
             var bitmapImage = new BitmapImage();
             await bitmapImage.SetSourceAsync(thumb);
-                
-            return bitmapImage;
+
+            var ImageIcon = new ImageIcon
+            {
+                Source = bitmapImage
+            };
+
+            return ImageIcon;
         }
 
 
