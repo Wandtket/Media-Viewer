@@ -9,7 +9,9 @@
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
   xmlns:iot2="http://schemas.microsoft.com/appx/manifest/iot/windows10/2"  
-  IgnorableNamespaces="uap rescap uap6 uap3 desktop4 iot2">
+  xmlns:iot="http://schemas.microsoft.com/appx/manifest/iot/windows10"  
+  xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"  
+  IgnorableNamespaces="uap rescap uap6 uap3 desktop4 iot2 iot uap4">
 
   <Identity
     Name="7715ab82-d2d4-4346-acad-2607e09d100e"
@@ -133,6 +135,10 @@
     <uap3:Capability Name="remoteSystem"/>
     <uap:Capability Name="removableStorage"/>
     <uap:Capability Name="videosLibrary"/>
+    <iot:Capability Name="systemManagement"/>
+    <uap4:Capability Name="userDataTasks"/>
+    <uap3:Capability Name="userNotificationListener"/>
+    <uap:Capability Name="userAccountInformation"/>
     <DeviceCapability Name="gazeInput"/>
     <DeviceCapability Name="microphone"/>
     <DeviceCapability Name="proximity"/>
