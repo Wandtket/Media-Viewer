@@ -38,6 +38,8 @@ namespace MediaViewer
             while (App.Current.ActiveWindow.Content == null) { await Task.Delay(50); }
             while (App.Current.ActiveWindow.Content.XamlRoot == null) { await Task.Delay(50); }
 
+            App.Current.ActiveWindow.AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
+
             await AudioPlay.LoadAudioFile(File);
         }
 
