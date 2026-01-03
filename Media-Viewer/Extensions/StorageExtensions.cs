@@ -10,6 +10,7 @@ using System.Drawing;
 using System.Drawing.Text;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.Storage.Pickers;
 using Windows.Storage.Search;
+using Windows.Storage.Streams;
 using Windows.System;
 using WinRT;
 using Image = Microsoft.UI.Xaml.Controls.Image;
@@ -28,6 +30,37 @@ namespace MediaViewer.Extensions
 
     internal static class Files
     {
+
+        public static async void CopyFileToClipboardAsync(this StorageFile File)
+        {
+            if (File == null) return;
+
+            var dataPackage = new DataPackage();
+            dataPackage.SetStorageItems(new List<StorageFile> { File });
+            Clipboard.SetContent(dataPackage);
+        }
+
+        public static void CopyFilePathToClipboard(this StorageFile File)
+        {
+            if (File == null) return;
+
+            var dataPackage = new DataPackage();
+            dataPackage.SetText(File.Path);
+            Clipboard.SetContent(dataPackage);
+        }
+
+
+        public static async Task ShowInFileExplorerAsync(this StorageFile File)
+        {
+            var options = new Windows.System.FolderLauncherOptions
+            {
+                 DesiredRemainingView = Windows.UI.ViewManagement.ViewSizePreference.Default,
+            };
+            options.ItemsToSelect.Add(File);
+
+            await Launcher.LaunchFolderPathAsync(Path.GetDirectoryName(File.Path), options);
+        }
+
 
         public static async Task<StorageFile?> SelectFile()
         {
@@ -60,27 +93,37 @@ namespace MediaViewer.Extensions
 
         public static String? GetAppDisplayName(string FilePath)
         {
-            var versionInfo = FileVersionInfo.GetVersionInfo(FilePath);
-            string displayName = versionInfo.ProductName ?? versionInfo.FileDescription;
+            if (!string.IsNullOrEmpty(FilePath))
+            {
+                var versionInfo = FileVersionInfo.GetVersionInfo(FilePath);
+                string displayName = versionInfo.ProductName ?? versionInfo.FileDescription;
 
-            return displayName;
+                return displayName;
+            }
+
+            return null;
         }
 
 
-        public static async Task<ImageIcon> GetAppIconAsync(string FilePath)
+        public static async Task<ImageIcon?> GetAppIconAsync(string FilePath)
         {
-            var exe = await StorageFile.GetFileFromPathAsync(FilePath);
-            var thumb = await exe.GetThumbnailAsync(ThumbnailMode.SingleItem, 64, ThumbnailOptions.UseCurrentScale);
-
-            var bitmapImage = new BitmapImage();
-            await bitmapImage.SetSourceAsync(thumb);
-
-            var ImageIcon = new ImageIcon
+            if (!string.IsNullOrEmpty(FilePath)) 
             {
-                Source = bitmapImage
-            };
+                var exe = await StorageFile.GetFileFromPathAsync(FilePath);
+                var thumb = await exe.GetThumbnailAsync(ThumbnailMode.SingleItem, 64, ThumbnailOptions.UseCurrentScale);
 
-            return ImageIcon;
+                var bitmapImage = new BitmapImage();
+                await bitmapImage.SetSourceAsync(thumb);
+
+                var ImageIcon = new ImageIcon
+                {
+                    Source = bitmapImage
+                };
+
+                return ImageIcon;
+            }
+
+            return null;
         }
 
 
