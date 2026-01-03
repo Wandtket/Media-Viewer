@@ -115,9 +115,9 @@ namespace MediaViewer.Extensions
                     targetHeight = scaledImageHeight;
                 }
 
-                // Add a small padding to account for window chrome/title bar if desired.
-                const int paddingWidth = 20;
-                const int paddingHeight = 40;
+                // Add a small padding to account for window chrome/title bar if desired default: 20 & 40.
+                const int paddingWidth = 0;
+                const int paddingHeight = 0;
 
                 // Use the existing Resize(height, width) helper (height first).
                 window.Resize(targetHeight + paddingHeight, targetWidth + paddingWidth);
@@ -169,8 +169,8 @@ namespace MediaViewer.Extensions
                 }
 
                 // Add a small padding to account for window chrome/title bar.
-                const int paddingWidthVideo = 20;
-                const int paddingHeightVideo = 40;
+                const int paddingWidthVideo = 0;
+                const int paddingHeightVideo = 0;
 
                 window.Resize(targetHeight + paddingHeightVideo, targetWidth + paddingWidthVideo);
             }
