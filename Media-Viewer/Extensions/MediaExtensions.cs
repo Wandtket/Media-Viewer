@@ -1,4 +1,5 @@
 ﻿using FFMpegCore;
+using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
 using MediaViewer.Models;
 using MediaViewer.Pages;
@@ -11,9 +12,16 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using Windows.Storage;
+using Windows.System;
+using Windows.System.UserProfile;
+using Windows.UI.ViewManagement;
 
 namespace MediaViewer.Extensions
 {
@@ -22,9 +30,141 @@ namespace MediaViewer.Extensions
     public static class MediaExtensions
     {
 
-        public static async void OpenFile()
-        {
 
+        /// <summary>
+        /// Opens media in user specified applications.
+        /// </summary>
+        /// <param name="File"></param>
+        /// <param name="action"></param>
+        public static async void OpenFile(StorageFile File, OpenAction action = OpenAction.Editor)
+        {
+            var Type = Files.GetMediaType(File.Path);
+
+            LauncherOptions options = new LauncherOptions
+            {
+                DisplayApplicationPicker = true,
+            };
+
+            if (Type == MediaType.Image)
+            {
+                if (!string.IsNullOrEmpty(Settings.Current.ImageEditorPath) && action == OpenAction.Editor)
+                {
+                    Process.Start(Settings.Current.ImageEditorPath, File.Path);
+                }
+                else if (!string.IsNullOrEmpty(Settings.Current.ImageUpscalerPath) && action == OpenAction.Upscaler)
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = Settings.Current.ImageUpscalerPath,
+                        Arguments = $"\"{File.Path}\"",
+                        UseShellExecute = true, // Show the GUI
+                        CreateNoWindow = false
+                    };
+
+                    var process = new Process { StartInfo = psi };
+                    process.Start();
+                }
+                else { await Launcher.LaunchFileAsync(File, options); }
+            }
+            else if (Type == MediaType.Gif)
+            {
+                if (!string.IsNullOrEmpty(Settings.Current.GifEditorPath))
+                {
+                    Process.Start(Settings.Current.GifEditorPath, File.Path);
+                }
+                else { await Launcher.LaunchFileAsync(File, options); }
+            }
+            else if (Type == MediaType.Audio)
+            {
+                if (!string.IsNullOrEmpty(Settings.Current.AudioEditorPath))
+                {
+                    Process.Start(Settings.Current.AudioEditorPath, File.Path);
+                }
+                else { await Launcher.LaunchFileAsync(File, options); }
+            }
+            else if (Type == MediaType.Video)
+            {
+                if (!string.IsNullOrEmpty(Settings.Current.VideoEditorPath) && action == OpenAction.Editor)
+                {
+                    //If the user decides to open with premiere a new project is created and the video is imported via jsx
+                    var editorName = System.IO.Path.GetFileName(Settings.Current.VideoEditorPath ?? "").ToLowerInvariant();
+                    if (editorName.Contains("premiere"))
+                    {
+                        await OpenInPremiereWithImportAsync(File);
+                    }
+                    else
+                    {
+                        Process.Start(Settings.Current.VideoEditorPath, File.Path);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(Settings.Current.VideoUpscalerPath) && action == OpenAction.Upscaler)
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = Settings.Current.VideoUpscalerPath,
+                        Arguments = $"\"{File.Path}\"",
+                        UseShellExecute = true, // Show the GUI
+                        CreateNoWindow = false
+                    };
+
+                    var process = new Process { StartInfo = psi };
+                    process.Start();
+                }
+                else if (!string.IsNullOrEmpty(Settings.Current.VideoConverterPath) && action == OpenAction.Converter)
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = Settings.Current.VideoConverterPath,
+                        Arguments = $"\"{File.Path}\"",
+                        UseShellExecute = true, // Show the GUI
+                        CreateNoWindow = false
+                    };
+
+                    var process = new Process { StartInfo = psi };
+                    process.Start();
+                }
+                else { await Launcher.LaunchFileAsync(File, options); }
+            }
+        }
+
+
+        /// <summary>
+        /// Extracts a single frame from a video file using FFmpeg.
+        /// </summary>
+        public static async Task ExtractVideoFrameAsync(string inputPath, TimeSpan position, string outputPath, bool isHDR)
+        {
+            string filterChain = isHDR
+                ? "zscale=t=linear:npl=100,zscale=t=bt709:m=bt709:r=tv,scale=in_range=tv:out_range=pc,format=rgb24"
+                : "scale=in_range=tv:out_range=pc,format=rgb24";
+
+            await FFMpegArguments
+                .FromFileInput(inputPath, true, options => options.Seek(position))
+                .OutputToFile(outputPath, overwrite: true, options => options
+                    .WithCustomArgument($"-vf \"{filterChain}\"")
+                    .WithCustomArgument("-frames:v 1")
+                    .WithCustomArgument("-q:v 2"))
+                .ProcessAsynchronously();
+        }
+
+        /// <summary>
+        /// Detects whether the video is HDR based on its media information.
+        /// </summary>
+        /// <param name="mediaInfo"></param>
+        /// <returns></returns>
+        public static bool IsHDRVideo(FFMpegCore.IMediaAnalysis mediaInfo)
+        {
+            var videoStream = mediaInfo.PrimaryVideoStream;
+            if (videoStream == null) return false;
+
+            // Check for HDR indicators: 10-bit depth, PQ/HLG transfer, or wide color gamut
+            bool is10Bit = videoStream.BitsPerRawSample >= 10 || videoStream.PixelFormat?.Contains("10") == true;
+            string colorTransfer = videoStream.ColorTransfer?.ToLower() ?? "";
+            string colorSpace = videoStream.ColorSpace?.ToLower() ?? "";
+
+            bool hasHDRTransfer = colorTransfer.Contains("smpte2084") || colorTransfer.Contains("arib-std-b67") || colorTransfer.Contains("bt2020");
+            bool hasWideGamut = colorSpace.Contains("bt2020");
+
+            return is10Bit && (hasHDRTransfer || hasWideGamut);
         }
 
 
@@ -64,6 +204,12 @@ namespace MediaViewer.Extensions
             return chapters;
         }
 
+
+        /// <summary>
+        /// Gets the video duration using FFProbe.
+        /// </summary>
+        /// <param name="videoPath"></param>
+        /// <returns></returns>
         public static async Task<TimeSpan> GetVideoDurationAsync(string videoPath)
         {
             try
@@ -79,24 +225,168 @@ namespace MediaViewer.Extensions
         }
 
 
-
-        public static void RunTopazVideoAI(string inputPath)
+        /// <summary>
+        /// Converts a Gif to a static image if the user selects it when saving.
+        /// </summary>
+        /// <param name="gifFile"></param>
+        /// <param name="destFile"></param>
+        /// <param name="encoderId"></param>
+        /// <returns></returns>
+        public static async Task ConvertGifToImageAsync(this StorageFile gifFile, StorageFile destFile, Guid encoderId)
         {
-            var topazExePath = @"C:\Program Files\Topaz Labs LLC\Topaz Video AI\Topaz Video AI.exe";
-            var args = $"\"{inputPath}\"";
-
-            var psi = new ProcessStartInfo
+            using (var stream = await gifFile.OpenAsync(FileAccessMode.Read))
             {
-                FileName = topazExePath,
-                Arguments = args,
-                UseShellExecute = true, // Show the Topaz GUI
-                CreateNoWindow = false
-            };
+                var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+                var frame = await decoder.GetFrameAsync(0);
 
-            var process = new Process { StartInfo = psi };
-            process.Start();
+                using (var outStream = await destFile.OpenAsync(FileAccessMode.ReadWrite))
+                {
+                    var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(encoderId, outStream);
+                    var pixelData = await frame.GetPixelDataAsync(
+                        Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
+                        Windows.Graphics.Imaging.BitmapAlphaMode.Ignore,
+                        new Windows.Graphics.Imaging.BitmapTransform(),
+                        Windows.Graphics.Imaging.ExifOrientationMode.IgnoreExifOrientation,
+                        Windows.Graphics.Imaging.ColorManagementMode.DoNotColorManage);
+
+                    encoder.SetPixelData(
+                        Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
+                        Windows.Graphics.Imaging.BitmapAlphaMode.Ignore,
+                        decoder.OrientedPixelWidth,
+                        decoder.OrientedPixelHeight,
+                        decoder.DpiX,
+                        decoder.DpiY,
+                        pixelData.DetachPixelData());
+
+                    await encoder.FlushAsync();
+                }
+            }
         }
 
+
+        /// <summary>
+        /// Opens a video file in Premiere Pro using a template project and import the file.
+        /// </summary>
+        public static async Task OpenInPremiereWithImportAsync(StorageFile videoFile)
+        {
+            try
+            {
+                // Check extension against a list of formats commonly supported by Adobe Premiere
+                var ext = System.IO.Path.GetExtension(videoFile.Path)?.ToLowerInvariant() ?? string.Empty;
+                var supportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ".mp4", ".mov", ".m4v", ".mxf", ".avi", ".wmv", ".mpg", ".mpeg", ".flv", ".mts", ".m2ts"
+                };
+
+                if (!supportedExtensions.Contains(ext))
+                {
+                    await MessageBox.Show($"Adobe Premiere does not support files with the '{ext}' extension.\n\n" +
+                        $"File: {videoFile.Name}\n\nPlease convert the file to a supported format.",
+                        "Unsupported Format");
+                    return;
+                }
+
+                var LocalPath = ApplicationData.Current.LocalFolder.Path;
+
+                var PrprojTemplate = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dependencies", "Template.prproj");
+                var JsxTemplate = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dependencies", "Template.jsx");
+
+                var PrprojPath = System.IO.Path.Combine(LocalPath, $"{videoFile.DisplayName}.prproj");
+                var JsxPath = System.IO.Path.Combine(LocalPath, $"Template.jsx");
+
+                File.Copy(PrprojTemplate, PrprojPath, true);
+                File.Copy(JsxTemplate, JsxPath, true);
+
+
+                string JSX = File.ReadAllText(JsxPath)
+                    .Replace("{PRPROJ}", PrprojPath)
+                    .Replace("{FILEPATH}", videoFile.Path)
+                    .Replace("\\", "\\\\");
+                File.WriteAllText(JsxPath, JSX);
+
+
+                // Pass only the JSX via -s; the JSX itself will open the project file.
+                var args = $" /C es.processFile \"{JsxPath}\"";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = Settings.Current.VideoEditorPath,
+                    Arguments = args,
+                    UseShellExecute = true,
+
+                };
+
+                Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                await ErrorBox.Show(ex);
+            }
+        }
+
+
+
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+
+        private const int SPI_SETDESKWALLPAPER = 0x0014;
+        private const int SPIF_UPDATEINIFILE = 0x01;
+        private const int SPIF_SENDWININICHANGE = 0x02;
+
+
+        public static async void SetAsDesktopBackgroundAsync(this StorageFile file)
+        {
+            var type = Files.GetMediaType(file.Path);
+
+            if (type == MediaType.Image || type == MediaType.Gif)
+            {
+                // Only works for BMP/JPG/PNG files
+                bool result = SystemParametersInfo(
+                    SPI_SETDESKWALLPAPER, 0, file.Path, SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE);
+
+                if (!result)
+                {
+                    await ErrorBox.Show(new Exception("Failed to set desktop background."));
+                }
+            }
+
+
+            var confirm = await ConfirmBox.Show("Would you like to open settings for further customization?", "Background Set", "Yes", "No");
+            if (confirm == ContentDialogResult.Primary)
+            {
+                await Launcher.LaunchUriAsync(new Uri("ms-settings:personalization-background"));
+            }
+        }
+
+        public static async void SetAsLockScreenAsync(this StorageFile File)
+        {
+            var Type = Files.GetMediaType(File.Path);
+
+            if (Type == MediaType.Image)
+            {
+                try
+                {
+                    // Copy to LocalFolder (overwrite if exists)
+                    var localFolder = ApplicationData.Current.LocalFolder;
+                    var copiedFile = await File.CopyAsync(localFolder, File.Name, NameCollisionOption.ReplaceExisting);
+
+                    // Try to set as lock screen
+                    bool result = await UserProfilePersonalizationSettings.Current.TrySetLockScreenImageAsync(copiedFile);
+                    await copiedFile.DeleteAsync();
+                }
+                catch
+                {
+                    await ErrorBox.Show(new Exception("Failed to set lock screen image."));
+                }
+            }
+
+            var confirm = await ConfirmBox.Show("Would you like to open settings for further customization?", "Lockscreen Set", "Yes", "No");
+            if (confirm == ContentDialogResult.Primary)
+            {
+                await Launcher.LaunchUriAsync(new Uri("ms-settings:lockscreen"));
+            }
+        }
 
     }
 
@@ -106,6 +396,7 @@ namespace MediaViewer.Extensions
 
         public event EventHandler<EventArgs> MarkIn;
         public event EventHandler<EventArgs> MarkOut;
+        public event EventHandler<EventArgs> MarksCleared;
 
         public event EventHandler<RepeatMode> RepeatToggled;
 
@@ -117,7 +408,7 @@ namespace MediaViewer.Extensions
         private List<ChapterInfo> Chapters = new List<ChapterInfo>();
         private TimeSpan MediaDuration;
 
-        private Rectangle MarkInMarker;
+        private UIElement MarkInMarker;
         private Rectangle MarkOutMarker;
         private TimeSpan? MarkInTime;
         private TimeSpan? MarkOutTime;
@@ -139,9 +430,14 @@ namespace MediaViewer.Extensions
             Button MarkOutButton = GetTemplateChild("MarkOutButton") as Button;
             MarkOutButton.Click += MarkOutButton_Click;
 
+            Button ClearMarksButton = GetTemplateChild("ClearMarksButton") as Button;
+            ClearMarksButton.Click += async (_, __) => ClearMarks();
+
             AppBarButton repeatButton = GetTemplateChild("RepeatButton") as AppBarButton;
             repeatButton.Click += RepeatButton_Click;
             SetRepeatMode(repeatButton, false);
+
+
 
             ChapterMarkersCanvas = GetTemplateChild("ChapterMarkersCanvas") as Canvas;
             ProgressSlider = GetTemplateChild("ProgressSlider") as Slider;
@@ -333,6 +629,7 @@ namespace MediaViewer.Extensions
             MarkInTime = null;
             MarkOutTime = null;
             UpdateMarkInOutMarkers();
+            MarksCleared?.Invoke(this, EventArgs.Empty); // Notify that marks were cleared
         }
 
         // Call this to set the media duration from FFmpeg
@@ -340,6 +637,7 @@ namespace MediaViewer.Extensions
         {
             MediaDuration = duration;
             UpdateChapterMarkers();
+            UpdateMarkInOutMarkers();
         }
 
         // Call this after loading chapters from FFmpeg
@@ -347,6 +645,7 @@ namespace MediaViewer.Extensions
         {
             Chapters = chapters;
             UpdateChapterMarkers();
+            UpdateMarkInOutMarkers();
         }
 
         // Overload to load both chapters and duration at once
@@ -355,11 +654,13 @@ namespace MediaViewer.Extensions
             Chapters = chapters;
             MediaDuration = duration;
             UpdateChapterMarkers();
+            UpdateMarkInOutMarkers();
         }
 
         private void OnProgressSliderSizeChanged(object sender, SizeChangedEventArgs e)
         {
             UpdateChapterMarkers();
+            UpdateMarkInOutMarkers();
         }
 
         private void UpdateChapterMarkers()
@@ -398,9 +699,6 @@ namespace MediaViewer.Extensions
                     ChapterMarkersCanvas.Children.Add(marker);
                 }
             }
-
-            // Update Mark In/Out markers
-            UpdateMarkInOutMarkers();
         }
 
         private void UpdateMarkInOutMarkers()
@@ -409,11 +707,14 @@ namespace MediaViewer.Extensions
                 return;
 
             double totalDuration = MediaDuration.TotalSeconds;
-
             if (totalDuration <= 0)
                 return;
 
             double sliderWidth = ProgressSlider.ActualWidth;
+
+            // Default WinUI Slider thumb width is 20px; adjust if your style is different
+            double thumbWidth = 20.0;
+            double thumbOffset = thumbWidth / 2.0;
 
             // Remove existing Mark In marker if it exists
             if (MarkInMarker != null && ChapterMarkersCanvas.Children.Contains(MarkInMarker))
@@ -431,17 +732,18 @@ namespace MediaViewer.Extensions
             if (MarkInTime.HasValue)
             {
                 double position = (MarkInTime.Value.TotalSeconds / totalDuration) * sliderWidth;
+                position += thumbOffset;
 
                 MarkInMarker = new Rectangle
                 {
-                    Width = 3,
-                    Height = 12,
+                    Width = 1,
+                    Height = 30,
                     Fill = new SolidColorBrush(Colors.Red),
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
                 Canvas.SetLeft(MarkInMarker, position);
-                Canvas.SetTop(MarkInMarker, 10.5); // Center vertically
+                Canvas.SetTop(MarkInMarker, 1);
 
                 ToolTipService.SetToolTip(MarkInMarker, $"Mark In: {FormatTimeSpan(MarkInTime.Value)}");
 
@@ -452,17 +754,18 @@ namespace MediaViewer.Extensions
             if (MarkOutTime.HasValue)
             {
                 double position = (MarkOutTime.Value.TotalSeconds / totalDuration) * sliderWidth;
+                position += thumbOffset;
 
                 MarkOutMarker = new Rectangle
                 {
-                    Width = 3,
-                    Height = 12,
+                    Width = 1,
+                    Height = 30,
                     Fill = new SolidColorBrush(Colors.Red),
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
                 Canvas.SetLeft(MarkOutMarker, position);
-                Canvas.SetTop(MarkOutMarker, 10.5); // Center vertically
+                Canvas.SetTop(MarkOutMarker, 1);
 
                 ToolTipService.SetToolTip(MarkOutMarker, $"Mark Out: {FormatTimeSpan(MarkOutTime.Value)}");
 
@@ -479,6 +782,7 @@ namespace MediaViewer.Extensions
         {
             MarkIn?.Invoke(this, EventArgs.Empty);
         }
+
 
         private void RepeatButton_Click(object sender, RoutedEventArgs e)
         {
@@ -517,8 +821,6 @@ namespace MediaViewer.Extensions
             Liked?.Invoke(this, EventArgs.Empty);
         }
     }
-
-
-
-
 }
+
+
