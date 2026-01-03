@@ -425,46 +425,7 @@ namespace MediaViewer
             MediaPage? Page = (MediaPage)PageFrame.Content;
             VisualPlayer? Player = (VisualPlayer)Page.MediaFlipView.SelectedItem;
 
-            string Path = Player.CurrentFile.Path;
-            var Type = Files.GetMediaType(Path);
-
-            LauncherOptions options = new LauncherOptions
-            {
-                DisplayApplicationPicker = true,
-            };
-
-            if (Type == MediaType.Image)
-            {
-                if (!string.IsNullOrEmpty(Settings.Current.ImageEditorPath))
-                {
-                    Process.Start(Settings.Current.ImageEditorPath, Path);
-                }
-                else { await Launcher.LaunchFileAsync(Player.CurrentFile, options); }
-            }
-            else if (Type == MediaType.Gif)
-            {
-                if (!string.IsNullOrEmpty(Settings.Current.GifEditorPath))
-                {
-                    Process.Start(Settings.Current.GifEditorPath, Path);
-                }
-                else { await Launcher.LaunchFileAsync(Player.CurrentFile, options); }
-            }
-            else if (Type == MediaType.Audio)
-            {
-                if (!string.IsNullOrEmpty(Settings.Current.AudioEditorPath))
-                {
-                    Process.Start(Settings.Current.AudioEditorPath, Path);
-                }
-                else { await Launcher.LaunchFileAsync(Player.CurrentFile, options); }
-            }
-            else if (Type == MediaType.Video)
-            {
-                if (!string.IsNullOrEmpty(Settings.Current.VideoEditorPath))
-                {
-                    Process.Start(Settings.Current.VideoEditorPath, Path);
-                }
-                else { await Launcher.LaunchFileAsync(Player.CurrentFile, options); }
-            }
+            MediaExtensions.OpenFile(Player.CurrentFile);
         }
 
         private async void RotateButton_Tapped(object sender, TappedRoutedEventArgs e)
@@ -605,6 +566,34 @@ namespace MediaViewer
                 }
 
                 e.Handled = true; // Prevent UI navigation
+            }
+        }
+
+        private void Page_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs args)
+        {
+            if ((char)args.Character == '[')
+            {
+                if (PageFrame.Content is not MediaPage page) return;
+                if (page.MediaFlipView?.SelectedItem is not VisualPlayer player) return;
+
+                player.TransportControls_MarkIn(null, null);
+                args.Handled = true;
+            }
+            else if ((char)args.Character == ']')
+            {
+                if (PageFrame.Content is not MediaPage page) return;
+                if (page.MediaFlipView?.SelectedItem is not VisualPlayer player) return;
+
+                player.TransportControls_MarkOut(null, null);
+                args.Handled = true;
+            }
+            else if ((char)args.Character == '\\')
+            {
+                if (PageFrame.Content is not MediaPage page) return;
+                if (page.MediaFlipView?.SelectedItem is not VisualPlayer player) return;
+
+                player.TransportControls_MarksCleared(null, null);
+                args.Handled = true;
             }
         }
 
