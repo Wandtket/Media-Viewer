@@ -595,6 +595,16 @@ namespace MediaViewer.Pages
         private string imageUpscalerPath = "imageUpscalerPath";
 
 
+        public string ReverseImageSearchProvider
+        {
+            get { return localSettings.Values[reverseImageSearchProvider] as string ?? "https://tineye.com/"; }
+            set { localSettings.Values[reverseImageSearchProvider] = value; OnPropertyChanged("ReverseImageSearchProvider"); }
+        }
+        private string reverseImageSearchProvider = "reverseImageSearchProvider";
+
+
+
+
 
         public bool Promotion
         {

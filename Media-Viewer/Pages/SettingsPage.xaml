@@ -378,6 +378,37 @@
 
             </controls:HeaderedContentControl>
 
+            <!--Searching-->
+            <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
+                <controls:HeaderedContentControl.Header>
+                    <TextBlock Text="Reverse Image Search" FontSize="14" Opacity=".6" Margin="5"/>
+                </controls:HeaderedContentControl.Header>
+
+                <StackPanel Spacing="3">
+
+                    <controls:SettingsCard x:Name="SearchProviderSettingsCard"
+                               Header="Search Engine"    
+                               Description="What the search button defaults to."
+                               IsEnabled="True" Padding="20,0,20,0">
+
+                        <controls:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xF6FA;" FontFamily="Segoe MDL2 Assets"/>
+                        </controls:SettingsCard.HeaderIcon>
+
+                        <StackPanel Spacing="5" Orientation="Horizontal">
+
+                            <TextBox PlaceholderText="https://tineye.com" 
+                                     Text="{x:Bind MS:Settings.Current.ReverseImageSearchProvider, Mode=TwoWay}"
+                                     MinWidth="300"/>
+                        </StackPanel>
+
+                    </controls:SettingsCard>
+
+                </StackPanel>
+
+            </controls:HeaderedContentControl>
+            
+            
             <!--Miscellaneous-->
             <controls:HeaderedContentControl HorizontalContentAlignment="Stretch" Margin="10">
                 <controls:HeaderedContentControl.Header>
