@@ -27,6 +27,7 @@ using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
 using Windows.System;
+using Windows.System.UserProfile;
 using Windows.UI.Input.Preview.Injection;
 using WinRT.Interop;
 using Pointer = Microsoft.UI.Xaml.Input.Pointer;
@@ -44,36 +45,18 @@ public sealed partial class VisualPlayer : UserControl
 
     public MediaPage? ParentPage;
 
+    public StorageFile CurrentFile;
+    public MediaProperties Properties;
+
+    public BitmapImage Thumbnail = new();
+    private BitmapImage GifImage;
+
+
     public bool MediaLoaded = false;
 
-    public StorageFile CurrentFile
-    {
-        get { return currentFile; }
-        set
-        {
-            currentFile = value;
-        }
-    }
-    private StorageFile currentFile;
-
-    public MediaProperties Properties
-    {
-        get { return properties; }
-        set { properties = value; }
-    }
-    private MediaProperties properties;
-
-    public BitmapImage Thumbnail
-    {
-        get { return thumbnail; }
-        set { thumbnail = value; }
-    }
-    private BitmapImage thumbnail = new();
-
-
-    private BitmapImage GifImage;
     private bool isPaused = false;
     public bool CanRotate = true;
+    public bool isHDR = false;
 
     public bool isFreeMove = false;
 
@@ -197,15 +180,32 @@ public sealed partial class VisualPlayer : UserControl
 
         ParentPage?.ParentPage?.RotateButton.IsEnabled = false;
 
-        var mediaInfo = await FFProbe.AnalyseAsync(source.Path);
-        VideoFrameRate = mediaInfo.PrimaryVideoStream?.FrameRate ?? 30.0;
+        try
+        {
+            var mediaInfo = await FFProbe.AnalyseAsync(source.Path);
+            VideoFrameRate = mediaInfo.PrimaryVideoStream?.FrameRate ?? 30.0;
+            isHDR = MediaExtensions.IsHDRVideo(mediaInfo);
+        }
+        catch
+        {
+            // Ignore ffprobe errors if video can still be played
+            VideoFrameRate = 30.0;
+        }
 
-        var chapters = await MediaExtensions.ExtractChaptersAsync(source.Path);
-        if (chapters.Count > 0)
+        try
         {
             var duration = VideoElement.MediaPlayer.PlaybackSession.NaturalDuration;
             ((CustomMediaTransportControls)VideoElement.TransportControls).SetMediaDuration(duration);
-            ((CustomMediaTransportControls)VideoElement.TransportControls).LoadChapters(chapters);
+
+            var chapters = await MediaExtensions.ExtractChaptersAsync(source.Path);
+            if (chapters.Count > 0)
+            {
+                ((CustomMediaTransportControls)VideoElement.TransportControls).LoadChapters(chapters);
+            }
+        }
+        catch
+        {
+            // Ignore chapter extraction errors
         }
     }
 
@@ -215,7 +215,7 @@ public sealed partial class VisualPlayer : UserControl
         if (CanRotate)
         {
             ImageRotation.Angle = (ImageRotation.Angle + 90) % 360;
-            await ImageElement.Rotate(currentFile, Windows.Graphics.Imaging.BitmapRotation.Clockwise90Degrees);
+            await ImageElement.Rotate(CurrentFile, Windows.Graphics.Imaging.BitmapRotation.Clockwise90Degrees);
             FitContentToWidth();
         }
     }
@@ -324,7 +324,7 @@ public sealed partial class VisualPlayer : UserControl
                 LoadRing.IsActive = false;
             }
 
-            var savedState = LoadPlaybackState(currentFile);
+            var savedState = LoadPlaybackState(CurrentFile);
 
             // Restore state after media is opened
             if (savedState != null)
@@ -376,15 +376,26 @@ public sealed partial class VisualPlayer : UserControl
 
     private void VisualPlayer_MediaEnded(Windows.Media.Playback.MediaPlayer sender, object args)
     {
-        // Only handle RepeatAll mode here
-        if (Settings.Current.RepeatMode == RepeatMode.RepeatAll)
+        var dispatcherQueue = App.Current.ActiveWindow?.DispatcherQueue ?? App.DispatcherQueue;
+        dispatcherQueue.TryEnqueue(() =>
         {
-            var dispatcherQueue = App.Current.ActiveWindow?.DispatcherQueue ?? App.DispatcherQueue;
-            dispatcherQueue.TryEnqueue(() =>
+            if (_markInPosition.HasValue && !_markOutPosition.HasValue)
+            {
+                // Only Mark In is set: loop to Mark In
+                sender.PlaybackSession.Position = _markInPosition.Value;
+                sender.Play();
+            }
+            else if (_markOutPosition.HasValue && !_markInPosition.HasValue)
+            {
+                // Only Mark Out is set: loop to beginning
+                sender.PlaybackSession.Position = TimeSpan.Zero;
+                sender.Play();
+            }
+            else if (Settings.Current.RepeatMode == RepeatMode.RepeatAll)
             {
                 AdvanceToNextItem();
-            });
-        }
+            }
+        });
     }
 
 
@@ -544,43 +555,116 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
-    private void ImageElement_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    private async void ImageElement_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         var s = (FrameworkElement)sender;
         var d = s.DataContext;
 
         MenuFlyout Flyout = new MenuFlyout();
 
+        //Share Item
         MenuFlyoutItem ShareItem = new MenuFlyoutItem { Text = $"Share", Icon = new SymbolIcon(Symbol.Share) };
         ShareItem.Click += async (_, __) => await ShareCurrentFrame();
-
-        MenuFlyoutItem EditItem = new MenuFlyoutItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
-        EditItem.Click += async (_, __) => await EditCurrentFrame();
-
-
-        MenuFlyoutItem CopyItem = new MenuFlyoutItem { Text = $"Copy", Icon = new SymbolIcon(Symbol.Copy) };
-        MenuFlyoutItem CopyDirPathItem = new MenuFlyoutItem { Text = $"Copy Directory Path", Icon = new SymbolIcon(Symbol.Copy) };
-
-        MenuFlyoutItem CopyFilePathItem = new MenuFlyoutItem { Text = $"Copy File Path", Icon = new SymbolIcon(Symbol.Copy) };
-
-        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save As", Icon = new SymbolIcon(Symbol.SaveLocal) };
-        SaveAsItem.Click += async (_, __) => SaveFrameToFile();
-
-        MenuFlyoutItem OpenWithItem = new MenuFlyoutItem { Text = $"Open With", Icon = new SymbolIcon(Symbol.OpenWith) };
-        MenuFlyoutItem OpenFileExplorerItem = new MenuFlyoutItem { Text = $"Open in File Explorer", Icon = new SymbolIcon(Symbol.OpenFile) };
-
-
-        MenuFlyoutItem SetAsItem = new MenuFlyoutItem { Text = $"Set As", Icon = new SymbolIcon(Symbol.Share) };
-
-        MenuFlyoutItem ResizeItem = new MenuFlyoutItem { Text = $"Fit to Window", };
-        ResizeItem.Click += async (_, __) => FitContentToWidth();
-
-
         Flyout.Items.Add(ShareItem);
-        Flyout.Items.Add(EditItem);
 
-        Flyout.Items.Add(ResizeItem);
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //Open With Item
+        MenuFlyoutItem OpenWithItem = new MenuFlyoutItem { Text = $"Open With", Icon = new SymbolIcon(Symbol.OpenWith) };
+        OpenWithItem.Click += async (_, __) => await Launcher.LaunchFileAsync(CurrentFile, new LauncherOptions() { DisplayApplicationPicker = true });
+        Flyout.Items.Add(OpenWithItem);
+
+        //Save As Item
+        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save As", Icon = new SymbolIcon(Symbol.SaveLocal) };
+        SaveAsItem.Click += async (_, __) => await SaveFrameToFile();
         Flyout.Items.Add(SaveAsItem);
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+
+        //Edit & Upscaler
+        if (!string.IsNullOrEmpty(Settings.Current.ImageUpscalerPath))
+        {
+            MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
+
+            IconElement? icon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
+                ? await Files.GetAppIconAsync(Settings.Current.ImageEditorPath)
+                : new SymbolIcon(Symbol.Edit);
+            MenuFlyoutItem EditImageItem = new MenuFlyoutItem { Text = $"Edit Image", Icon = icon };
+            EditImageItem.Click += async (_, __) => await EditCurrentFrame();
+            EditItem.Items.Add(EditImageItem);
+
+            MenuFlyoutItem UpscaleImageItem = new MenuFlyoutItem { Text = $"Upscale Image", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
+            UpscaleImageItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
+            EditItem.Items.Add(UpscaleImageItem);
+
+            Flyout.Items.Add(EditItem);
+        }
+        else
+        {
+            MenuFlyoutItem EditItem = new MenuFlyoutItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
+            EditItem.Click += async (_, __) => await EditCurrentFrame();
+            Flyout.Items.Add(EditItem);
+        }
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //Copy Items
+        MenuFlyoutItem CopyItem = new MenuFlyoutItem { Text = $"Copy", Icon = new SymbolIcon(Symbol.Copy) };
+        CopyItem.Click += async (_, __) => { CurrentFile.CopyFileToClipboardAsync(); ShowClipboardFeedback(); };
+        Flyout.Items.Add(CopyItem);
+
+        MenuFlyoutItem CopyAsPathItem = new MenuFlyoutItem { Text = $"Copy as Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
+        CopyAsPathItem.Click += async (_, __) => { CurrentFile.CopyFilePathToClipboard(); };
+        Flyout.Items.Add(CopyAsPathItem);
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        MenuFlyoutItem OpenFileExplorerItem = new MenuFlyoutItem { Text = $"Show in File Explorer", Icon = new SymbolIcon(Symbol.OpenFile) };
+        OpenFileExplorerItem.Click += async (_, __) => await CurrentFile.ShowInFileExplorerAsync();
+        Flyout.Items.Add(OpenFileExplorerItem);
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+
+        if (Files.GetMediaType(CurrentFile.Path) == MediaType.Image) 
+        {
+            //Set As Item
+            MenuFlyoutSubItem SetAsItem = new MenuFlyoutSubItem { Text = $"Set As", Icon = new FontIcon() { Glyph = "\uE9D9" } };
+            MenuFlyoutItem LockscreenItem = new MenuFlyoutItem { Text = $"Lock screen", Icon = new FontIcon() { Glyph = "\uEE3F" } };
+            LockscreenItem.Click += async (_, __) => CurrentFile.SetAsLockScreenAsync();
+            SetAsItem.Items.Add(LockscreenItem);
+
+            MenuFlyoutItem BackgroundItem = new MenuFlyoutItem { Text = $"Background", Icon = new FontIcon() { Glyph = "\uE771" } };
+            BackgroundItem.Click += async (_, __) => MediaExtensions.SetAsDesktopBackgroundAsync(CurrentFile);
+            SetAsItem.Items.Add(BackgroundItem);
+            Flyout.Items.Add(SetAsItem);
+        }   
+
+        //Fit to Window Item
+        MenuFlyoutItem FitItem = new MenuFlyoutItem { Text = $"Fit to Window", Icon = new FontIcon() { Glyph = "\uE9A6" } };
+        FitItem.Click += async (_, __) => FitContentToWidth();
+        Flyout.Items.Add(FitItem);
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //Reverse Image Search Item
+        MenuFlyoutItem ReverseImageSearchItem = new MenuFlyoutItem { Text = $"Reverse Image Search", Icon = new FontIcon() { Glyph = "\uF6FA" } };
+        ReverseImageSearchItem.Click += async (_, __) => await Launcher.LaunchUriAsync(new Uri(Settings.Current.ReverseImageSearchProvider));
+        Flyout.Items.Add(ReverseImageSearchItem);
+
+        //File Information Item
+        MenuFlyoutItem FileInformationItem = new MenuFlyoutItem { Text = $"File Information", Icon = new FontIcon() { Glyph = "\uE946" } };
+        FileInformationItem.Click += async (_, __) => ParentPage?.ParentPage?.MainViewContent.IsPaneOpen = true;
+        Flyout.Items.Add(FileInformationItem);
+
+
         Flyout.ShowAt(s, e.GetPosition(s));
     }
 
@@ -671,113 +755,119 @@ public sealed partial class VisualPlayer : UserControl
 
         MenuFlyout Flyout = new MenuFlyout();
 
+        //Share Item
         MenuFlyoutItem ShareItem = new MenuFlyoutItem { Text = $"Share", Icon = new SymbolIcon(Symbol.Share) };
         ShareItem.Click += async (_, __) => await ShareCurrentFrame();
+        Flyout.Items.Add(ShareItem);
 
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
 
+        //Open With Item
+        MenuFlyoutItem OpenWithItem = new MenuFlyoutItem { Text = $"Open With", Icon = new SymbolIcon(Symbol.OpenWith) };
+        OpenWithItem.Click += async (_, __) => await Launcher.LaunchFileAsync(CurrentFile, new LauncherOptions() { DisplayApplicationPicker = true });
+        Flyout.Items.Add(OpenWithItem);
+
+        //Save As Item
+        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Frame As", Icon = new SymbolIcon(Symbol.SaveLocal) };
+        SaveAsItem.Click += async (_, __) => await SaveFrameToFile();
+        Flyout.Items.Add(SaveAsItem);
+
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //Edit 
         MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
-        MenuFlyoutItem EditVideoItem = new MenuFlyoutItem { Text = $"Edit Video", Icon = new FontIcon() { Glyph = "\uE714" } };
-        MenuFlyoutItem EditFrameItem = new MenuFlyoutItem { Text = $"Edit Frame", Icon = new SymbolIcon(Symbol.Edit) };
-        MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
-        MenuFlyoutItem ConvertToVideoItem = new MenuFlyoutItem { Text = $"Convert to Video", Icon = new FontIcon() { Glyph = "\uEA0C" } };
 
-
-        EditFrameItem.Click += async (_, __) => await EditCurrentFrame();
+        //Edit Video
+        IconElement? editvideoicon = Files.GetAppDisplayName(Settings.Current.VideoEditorPath) != null
+             ? await Files.GetAppIconAsync(Settings.Current.VideoEditorPath)
+             : new SymbolIcon(Symbol.Edit);
+        MenuFlyoutItem EditVideoItem = new MenuFlyoutItem { Text = $"Edit Video", Icon = editvideoicon };
+        EditVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Editor);
         EditItem.Items.Add(EditVideoItem);
+
+        //Edit Frame
+        IconElement? editframeicon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
+             ? await Files.GetAppIconAsync(Settings.Current.ImageEditorPath)
+             : new SymbolIcon(Symbol.Edit);
+        MenuFlyoutItem EditFrameItem = new MenuFlyoutItem { Text = $"Edit Frame", Icon = editframeicon };
+        EditFrameItem.Click += async (_, __) => await EditCurrentFrame();
         EditItem.Items.Add(EditFrameItem);
+
+        //Separator
         EditItem.Items.Add(new MenuFlyoutSeparator());
+
+        //Converter to Gif
+        MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
         EditItem.Items.Add(ConvertToGifItem);
-        EditItem.Items.Add(ConvertToVideoItem);
+
         EditItem.Items.Add(new MenuFlyoutSeparator());
 
         //Video Converter
         if (!string.IsNullOrEmpty(Settings.Current.VideoConverterPath))
         {
             MenuFlyoutItem ConvertVideoItem = new MenuFlyoutItem { Text = $"Convert Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath) };
-            ConvertVideoItem.Click += async (_, __) => UpscaleVideo();
+            ConvertVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Converter); ;
             EditItem.Items.Add(ConvertVideoItem);
             EditItem.Items.Add(new MenuFlyoutSeparator());
         }
 
-        //Upscaler
+        //Video Upscaler
         if (!string.IsNullOrEmpty(Settings.Current.VideoUpscalerPath))
         {
             MenuFlyoutItem UpscaleVideoItem = new MenuFlyoutItem { Text = $"Upscale Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoUpscalerPath) };
-            UpscaleVideoItem.Click += async (_, __) => UpscaleVideo();
+            UpscaleVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
             EditItem.Items.Add(UpscaleVideoItem);
         }
          
+        //Image Upscaler
         if (!string.IsNullOrEmpty(Settings.Current.ImageUpscalerPath))
         {
             MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Frame", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
-            UpscaleFrameItem.Click += async (_, __) => UpscaleImage();
+            UpscaleFrameItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
             EditItem.Items.Add(UpscaleFrameItem);
         }
 
-
-        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Frame As", Icon = new SymbolIcon(Symbol.SaveLocal) };
-        SaveAsItem.Click += async (_, __) => await SaveFrameToFile();
-
-        MenuFlyoutItem OpenWithItem = new MenuFlyoutItem { Text = $"Open With", Icon = new SymbolIcon(Symbol.OpenWith) };
-
-
-        MenuFlyoutSubItem CopyItem = new MenuFlyoutSubItem { Text = $"Copy", Icon = new SymbolIcon(Symbol.Copy) };
-        MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Image Frame", Icon = new SymbolIcon(Symbol.Copy) };
-        MenuFlyoutSeparator separatorCopy = new MenuFlyoutSeparator();
-        MenuFlyoutItem CopyDirPathItem = new MenuFlyoutItem { Text = $"Copy Directory Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
-        MenuFlyoutItem CopyFilePathItem = new MenuFlyoutItem { Text = $"Copy File Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
-
-        CopyItem.Items.Add(CopyFrameItem);
-        CopyItem.Items.Add(separatorCopy);
-        CopyItem.Items.Add(CopyDirPathItem);
-        CopyItem.Items.Add(CopyFilePathItem);
-
-        MenuFlyoutItem OpenFileExplorerItem = new MenuFlyoutItem { Text = $"Show in File Explorer", Icon = new SymbolIcon(Symbol.OpenFile) };
-
-        MenuFlyoutSubItem SetAsItem = new MenuFlyoutSubItem { Text = $"Set Frame As", Icon = new FontIcon() { Glyph = "\uE9D9" } };
-        MenuFlyoutItem LockscreenItem = new MenuFlyoutItem { Text = $"Lock screen", Icon = new FontIcon() { Glyph = "\uEE3F" } };
-        MenuFlyoutItem BackgroundItem = new MenuFlyoutItem { Text = $"Background", Icon = new FontIcon() { Glyph = "\uE771" } };
-        SetAsItem.Items.Add(LockscreenItem);
-        SetAsItem.Items.Add(BackgroundItem);
-
-        MenuFlyoutItem FitItem = new MenuFlyoutItem { Text = $"Fit to Window", Icon = new FontIcon() { Glyph = "\uE9A6" } };
-
-        MenuFlyoutItem ReverseImageSearchItem = new MenuFlyoutItem { Text = $"Reverse Image Search", Icon = new FontIcon() { Glyph = "\uF6FA" } };
-        MenuFlyoutItem FileInformationItem = new MenuFlyoutItem { Text = $"File Information", Icon = new FontIcon() { Glyph = "\uE946" } };
-
-
-
-        FitItem.Click += async (_, __) => FitContentToWidth();
-
-
-        Flyout.Items.Add(ShareItem);
-
-        Flyout.Items.Add(new MenuFlyoutSeparator());
-
-        Flyout.Items.Add(OpenWithItem);
-        Flyout.Items.Add(SaveAsItem);
-
-        Flyout.Items.Add(new MenuFlyoutSeparator());
-
         Flyout.Items.Add(EditItem);
 
+        //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-        Flyout.Items.Add(CopyItem);
 
+        //Copy Frame Item
+        MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Frame", Icon = new SymbolIcon(Symbol.Copy) };
+        CopyFrameItem.Click += async (_, __) => CopyFrameToClipboard();
+        Flyout.Items.Add(CopyFrameItem);
+
+
+        //Copy as Path Item
+        MenuFlyoutItem CopyAsPathItem = new MenuFlyoutItem { Text = $"Copy as Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
+        CopyAsPathItem.Click += async (_, __) => { CurrentFile.CopyFilePathToClipboard(); };
+        Flyout.Items.Add(CopyAsPathItem);
+
+        //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
+        //Show in File Explorer Item
+        MenuFlyoutItem OpenFileExplorerItem = new MenuFlyoutItem { Text = $"Show in File Explorer", Icon = new SymbolIcon(Symbol.OpenFile) };
+        OpenFileExplorerItem.Click += async (_, __) => await CurrentFile.ShowInFileExplorerAsync();
         Flyout.Items.Add(OpenFileExplorerItem);
 
+        //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-        Flyout.Items.Add(SetAsItem);
+
+        //Fit to Window Item
+        MenuFlyoutItem FitItem = new MenuFlyoutItem { Text = $"Fit to Window", Icon = new FontIcon() { Glyph = "\uE9A6" } };
+        FitItem.Click += async (_, __) => FitContentToWidth();
         Flyout.Items.Add(FitItem);
 
-        Flyout.Items.Add(new MenuFlyoutSeparator());
-        Flyout.Items.Add(ReverseImageSearchItem);
-        Flyout.Items.Add(FileInformationItem);
 
+        //File Information Item
+        MenuFlyoutItem FileInformationItem = new MenuFlyoutItem { Text = $"File Information", Icon = new FontIcon() { Glyph = "\uE946" } };
+        FileInformationItem.Click += async (_, __) => ParentPage?.ParentPage?.MainViewContent.IsPaneOpen = true;
+        Flyout.Items.Add(FileInformationItem);
 
         Flyout.ShowAt(s, e.GetPosition(s));
     }
@@ -1078,7 +1168,6 @@ public sealed partial class VisualPlayer : UserControl
             ScrollViewer activeScrollViewer = null;
             FrameworkElement contentElement = null;
 
-            // Determine which ScrollViewer and content element to use based on visibility
             if (ImageElement.Visibility == Visibility.Visible && ImageScrollViewer != null)
             {
                 activeScrollViewer = ImageScrollViewer;
@@ -1104,7 +1193,6 @@ public sealed partial class VisualPlayer : UserControl
             // If layout not ready yet, try again shortly.
             if (contentWidth <= 0 || viewportWidth <= 0)
             {
-                // Defer to next dispatcher turn to allow layout to complete.
                 _ = this.DispatcherQueue.TryEnqueue(async () =>
                 {
                     await Task.Delay(20);
@@ -1113,12 +1201,25 @@ public sealed partial class VisualPlayer : UserControl
                 return;
             }
 
-            // Compute a zoom so the full width of the content fits into the viewport.
-            // Do not upscale beyond 1.0 (100%) so we don't artificially enlarge small content.
-            float targetZoom = (float)Math.Min(1.0, viewportWidth / contentWidth);
+            // Ensure content is stretched
+            contentElement.HorizontalAlignment = HorizontalAlignment.Stretch;
+            contentElement.VerticalAlignment = VerticalAlignment.Stretch;
 
-            // Reset horizontal and vertical offsets and apply the zoom.
+            // Compute a zoom so the full width of the content fits into the viewport.
+            float targetZoom = (float)(viewportWidth / contentWidth);
+
+            // Clamp zoom to 1.0 (do not upscale beyond 100%)
+            targetZoom = Math.Min(1.0f, targetZoom);
+
+            // Reset offsets and apply the zoom.
             activeScrollViewer.ChangeView(0, 0, targetZoom, disableAnimation: true);
+
+            // Center content if smaller than viewport
+            if (targetZoom == 1.0f && contentWidth < viewportWidth)
+            {
+                double offset = (viewportWidth - contentWidth) / 2;
+                activeScrollViewer.ChangeView(offset, 0, targetZoom, disableAnimation: true);
+            }
 
             // If the ScrollViewer is in free-move mode inside a VisualCanvas, ensure canvas offsets don't hide the left edge.
             if (activeScrollViewer.Parent is VisualCanvas)
@@ -1132,7 +1233,6 @@ public sealed partial class VisualPlayer : UserControl
             // Intentionally ignore layout/measure timing exceptions.
         }
     }
-
 
     #region Free Move
 
@@ -1313,7 +1413,7 @@ public sealed partial class VisualPlayer : UserControl
             string tempPath = Path.Combine((await Folders.GetTempFolder()).Path, tempFileName);
 
             // Extract the frame using FFmpeg
-            await ExtractVideoFrameAsync(CurrentFile.Path, position, tempPath);
+            await MediaExtensions.ExtractVideoFrameAsync(CurrentFile.Path, position, tempPath, isHDR);
 
             // Load the extracted frame
             var frameFile = await StorageFile.GetFileFromPathAsync(tempPath);
@@ -1336,47 +1436,7 @@ public sealed partial class VisualPlayer : UserControl
         return null;
     }
 
-    /// <summary>
-    /// Extracts a single frame from a video file using FFmpeg.
-    /// </summary>
-    private async Task ExtractVideoFrameAsync(string inputPath, TimeSpan position, string outputPath)
-    {
-        var mediaInfo = await FFProbe.AnalyseAsync(inputPath);
-        bool isHDR = IsHDRVideo(mediaInfo);
 
-        string filterChain = isHDR
-            ? "zscale=t=linear:npl=100,zscale=t=bt709:m=bt709:r=tv,scale=in_range=tv:out_range=pc,format=rgb24"
-            : "scale=in_range=tv:out_range=pc,format=rgb24";
-
-        await FFMpegArguments
-            .FromFileInput(inputPath, true, options => options.Seek(position))
-            .OutputToFile(outputPath, overwrite: true, options => options
-                .WithCustomArgument($"-vf \"{filterChain}\"")
-                .WithCustomArgument("-frames:v 1")
-                .WithCustomArgument("-q:v 2"))
-            .ProcessAsynchronously();
-    }
-
-    /// <summary>
-    /// Detects whether the video is HDR based on its media information.
-    /// </summary>
-    /// <param name="mediaInfo"></param>
-    /// <returns></returns>
-    private bool IsHDRVideo(FFMpegCore.IMediaAnalysis mediaInfo)
-    {
-        var videoStream = mediaInfo.PrimaryVideoStream;
-        if (videoStream == null) return false;
-
-        // Check for HDR indicators: 10-bit depth, PQ/HLG transfer, or wide color gamut
-        bool is10Bit = videoStream.BitsPerRawSample >= 10 || videoStream.PixelFormat?.Contains("10") == true;
-        string colorTransfer = videoStream.ColorTransfer?.ToLower() ?? "";
-        string colorSpace = videoStream.ColorSpace?.ToLower() ?? "";
-
-        bool hasHDRTransfer = colorTransfer.Contains("smpte2084") || colorTransfer.Contains("arib-std-b67") || colorTransfer.Contains("bt2020");
-        bool hasWideGamut = colorSpace.Contains("bt2020");
-
-        return is10Bit && (hasHDRTransfer || hasWideGamut);
-    }
 
     /// <summary>
     /// Saves a frame to a user-selected file.
@@ -1384,6 +1444,7 @@ public sealed partial class VisualPlayer : UserControl
     /// <returns></returns>
     public async Task SaveFrameToFile()
     {
+
         // Handle image saving when ImageElement is visible
         if (ImageElement.Visibility == Visibility.Visible && ImageElement.Source != null)
         {
@@ -1396,7 +1457,6 @@ public sealed partial class VisualPlayer : UserControl
             picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
             picker.SuggestedFileName = baseName;
 
-            // Provide a selection of common image formats
             picker.FileTypeChoices.Add("PNG", new List<string> { ".png" });
             picker.FileTypeChoices.Add("JPEG", new List<string> { ".jpg", ".jpeg" });
             picker.FileTypeChoices.Add("BMP", new List<string> { ".bmp" });
@@ -1407,8 +1467,30 @@ public sealed partial class VisualPlayer : UserControl
             var dest = await picker.PickSaveFileAsync();
             if (dest == null) return; // user cancelled
 
-            // Copy the file to the destination
-            await CurrentFile.CopyAndReplaceAsync(dest);
+            // If the current file is a GIF and the user selects a static image format
+            var ext = Path.GetExtension(dest.Path).ToLowerInvariant();
+            var isGif = Files.GetMediaType(CurrentFile.Path) == MediaType.Gif;
+            bool isStaticImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tiff" || ext == ".tif" || ext == ".webp";
+
+            if (isGif && isStaticImage)
+            {
+                Guid encoderId = ext switch
+                {
+                    ".png" => Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,
+                    ".jpg" or ".jpeg" => Windows.Graphics.Imaging.BitmapEncoder.JpegEncoderId,
+                    ".bmp" => Windows.Graphics.Imaging.BitmapEncoder.BmpEncoderId,
+                    ".tiff" or ".tif" => Windows.Graphics.Imaging.BitmapEncoder.TiffEncoderId,
+                    ".webp" => Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId,
+                    _ => Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId
+                };
+
+                await CurrentFile.ConvertGifToImageAsync(dest, encoderId);
+            }
+            else
+            {
+                // Copy the file to the destination
+                await CurrentFile.CopyAndReplaceAsync(dest);
+            }
             return;
         }
 
@@ -1443,7 +1525,7 @@ public sealed partial class VisualPlayer : UserControl
             var dest = await picker.PickSaveFileAsync();
             if (dest == null) return; // user cancelled
 
-            await ExtractVideoFrameAsync(CurrentFile.Path, position, dest.Path);
+            await MediaExtensions.ExtractVideoFrameAsync(CurrentFile.Path, position, dest.Path, isHDR);
         }
     }
 
@@ -1654,10 +1736,6 @@ public sealed partial class VisualPlayer : UserControl
 
             string input = CurrentFile.Path;
 
-            // Detect if video is HDR
-            var mediaInfo = await FFProbe.AnalyseAsync(input);
-            bool isHDR = IsHDRVideo(mediaInfo);
-
             string filterChain = isHDR
                 ? "zscale=t=linear:npl=100,zscale=t=bt709:m=bt709:r=tv,scale=in_range=tv:out_range=pc,format=rgb24"
                 : "scale=in_range=tv:out_range=pc,format=rgb24";
@@ -1867,11 +1945,20 @@ public sealed partial class VisualPlayer : UserControl
                         sender.Position = _markInPosition.Value;
                     }
                 }
+                // Handle only Mark Out set: loop to beginning if mark out reached
+                else if (!_markInPosition.HasValue && _markOutPosition.HasValue)
+                {
+                    if (sender.Position >= _markOutPosition.Value)
+                    {
+                        sender.Position = TimeSpan.Zero;
+                    }
+                }
 
                 SavePlaybackState();
             });
         }
     }
+
 
     private void SavePlaybackState()
     {
@@ -1991,7 +2078,7 @@ public sealed partial class VisualPlayer : UserControl
     private TimeSpan? _markOutPosition = null;
     private bool _isLoopingMarkedSection = false;
 
-    private void TransportControls_MarkIn(object sender, EventArgs e)
+    public void TransportControls_MarkIn(object sender, EventArgs e)
     {
         if (VideoElement.Visibility != Visibility.Visible ||
             !(VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter) ||
@@ -2003,9 +2090,16 @@ public sealed partial class VisualPlayer : UserControl
         var session = presenter.MediaPlayer.PlaybackSession;
         if (session == null) return;
 
-        _markInPosition = session.Position;
+        // If Mark In is set and user clicks again at (or near) the same position, clear it
+        if (_markInPosition.HasValue && Math.Abs((_markInPosition.Value - session.Position).TotalSeconds) < 0.1)
+        {
+            _markInPosition = null;
+            ((CustomMediaTransportControls)VideoElement.TransportControls).ClearMarkIn();
+            _isLoopingMarkedSection = false;
+            return;
+        }
 
-        // Update the visual marker on the transport controls
+        _markInPosition = session.Position;
         ((CustomMediaTransportControls)VideoElement.TransportControls).SetMarkIn(session.Position);
 
         // If Mark In is after Mark Out, clear Mark Out
@@ -2024,7 +2118,7 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
-    private void TransportControls_MarkOut(object sender, EventArgs e)
+    public void TransportControls_MarkOut(object sender, EventArgs e)
     {
         if (VideoElement.Visibility != Visibility.Visible ||
             !(VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter) ||
@@ -2036,9 +2130,16 @@ public sealed partial class VisualPlayer : UserControl
         var session = presenter.MediaPlayer.PlaybackSession;
         if (session == null) return;
 
-        _markOutPosition = session.Position;
+        // If Mark Out is set and user clicks again at (or near) the same position, clear it
+        if (_markOutPosition.HasValue && Math.Abs((_markOutPosition.Value - session.Position).TotalSeconds) < 0.1)
+        {
+            _markOutPosition = null;
+            ((CustomMediaTransportControls)VideoElement.TransportControls).ClearMarkOut();
+            _isLoopingMarkedSection = false;
+            return;
+        }
 
-        // Update the visual marker on the transport controls
+        _markOutPosition = session.Position;
         ((CustomMediaTransportControls)VideoElement.TransportControls).SetMarkOut(session.Position);
 
         // If Mark Out is before Mark In, clear Mark In
@@ -2057,6 +2158,22 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
+    public void TransportControls_MarksCleared(object sender, EventArgs e)
+    {
+        _markInPosition = null;
+        _markOutPosition = null;
+        _isLoopingMarkedSection = false;
+
+        ((CustomMediaTransportControls)VideoElement.TransportControls).ClearMarkIn();
+        ((CustomMediaTransportControls)VideoElement.TransportControls).ClearMarkOut();
+
+        // Restore original repeat mode behavior
+        if (VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter &&
+            presenter.MediaPlayer != null)
+        {
+            presenter.MediaPlayer.IsLoopingEnabled = (Settings.Current.RepeatMode == RepeatMode.RepeatOne);
+        }
+    }
 
     private void EnableMarkedSectionLooping()
     {
@@ -2070,48 +2187,10 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
-    public void ClearMarkInOut()
-    {
-        _markInPosition = null;
-        _markOutPosition = null;
-        _isLoopingMarkedSection = false;
-
-        // Clear visual markers on transport controls
-        if (VideoElement.TransportControls is CustomMediaTransportControls customControls)
-        {
-            customControls.ClearMarks();
-        }
-
-        // Restore original repeat mode behavior
-        if (VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter &&
-            presenter.MediaPlayer != null)
-        {
-            presenter.MediaPlayer.IsLoopingEnabled = (Settings.Current.RepeatMode == RepeatMode.RepeatOne);
-        }
-    }
 
     #endregion
 
-    #region Editing
-    private void UpscaleVideo()
-    {
-        if (VideoElement.Visibility != Visibility.Visible)
-        {
-            return;
-        }
-        if (VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter &&
-            presenter.MediaPlayer != null)
-        {
-            MediaExtensions.RunTopazVideoAI(CurrentFile.Path);
-        }
-    }
 
-    private void UpscaleImage()
-    {
-
-    }
-
-    #endregion
 
     private void ImageElement_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
     {

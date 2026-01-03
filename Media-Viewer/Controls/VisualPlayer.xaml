@@ -93,7 +93,8 @@
                     Liked="TransportControls_Liked"
                     RepeatToggled="TransportControls_RepeatToggled"
                     MarkIn="TransportControls_MarkIn"
-                    MarkOut="TransportControls_MarkOut">
+                    MarkOut="TransportControls_MarkOut"
+                    MarksCleared="TransportControls_MarksCleared">
 
                 </ext:CustomMediaTransportControls>
             </MediaPlayerElement.TransportControls>
