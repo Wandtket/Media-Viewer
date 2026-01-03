@@ -833,14 +833,6 @@
                                                     VerticalAlignment="Center"
                                                     ToolTipService.ToolTip="Something"
                                                     IsThumbToolTipEnabled="False"/>
-                                                <!--<controls1:RangeSelector x:Name="ProgressRangeSlider" 
-                                                                            Margin="12,0"
-                                                                            MinWidth="80"
-                                                                            Height="33"
-                                                                            VerticalAlignment="Center"
-                                                                            Minimum="{Binding ElementName=ProgressSlider, Path=Minimum, UpdateSourceTrigger=PropertyChanged}"
-                                                                            Maximum="{Binding ElementName=ProgressSlider, Path=Maximum, UpdateSourceTrigger=PropertyChanged}"
-                                                                            StepFrequency="{Binding ElementName=ProgressSlider, Path=StepFrequency, UpdateSourceTrigger=PropertyChanged}"/>-->
                                                 <ProgressBar x:Name="BufferingProgressBar"
                                                     Height="4"
                                                     IsIndeterminate="True"
@@ -967,6 +959,13 @@
                                                         Width ='0'
                                                         Margin='0,0' />
 
+                                                    <AppBarButton x:Name='LikeButton'
+                                                         Icon="Favorite"
+                                                         Label="Favorite"
+                                                         VerticalAlignment="Center"
+                                                         Visibility="Collapsed"
+                                                         MediaTransportControlsHelper.DropoutOrder='3'/>
+
                                                     <AppBarButton x:Name='VolumeMuteButton'
                                                             MediaTransportControlsHelper.DropoutOrder='5'
                                                             Label="Volume">
@@ -1005,34 +1004,6 @@
                                                     </AppBarButton>
 
 
-                                                    <AppBarButton x:Name='LikeButton'
-                                                         Icon="Like"
-                                                         Label="Like"
-                                                         VerticalAlignment="Center"
-                                                         Visibility="Collapsed"
-                                                         MediaTransportControlsHelper.DropoutOrder='3'/>
-
-                                                    <AppBarButton x:Name='MarkInButton'
-                                                        Label="Mark In"
-                                                        VerticalAlignment="Center"
-                                                        MediaTransportControlsHelper.DropoutOrder='3'
-                                                        Margin="0,0,0,0">
-                                                        <FontIcon Glyph='&#xEDE2;' RenderTransformOrigin="0.5,0.5">
-                                                            <FontIcon.RenderTransform>
-                                                                <ScaleTransform ScaleX="-1"/>
-                                                            </FontIcon.RenderTransform>
-                                                        </FontIcon>
-                                                    </AppBarButton>
-
-                                                    <AppBarButton x:Name='MarkOutButton'
-                                                         Label="Mark Out"
-                                                         VerticalAlignment="Center"
-                                                         MediaTransportControlsHelper.DropoutOrder='3'>
-                                                        <AppBarButton.Icon>
-                                                            <FontIcon Glyph='&#xEDE2;' />
-                                                        </AppBarButton.Icon>
-                                                    </AppBarButton>
-
                                                     <AppBarButton IsEnabled="False" Width="50"/>
 
                                                 </CommandBar.PrimaryCommands>
@@ -1068,6 +1039,40 @@
                                                             <KeyboardAccelerator Modifiers="Control" Key="S"/>
                                                         </AppBarButton.KeyboardAccelerators>
                                                     </AppBarButton>
+                                                    <AppBarSeparator/>
+                                                    <AppBarButton x:Name='MarkInButton'
+                                                        Label="Mark In"
+                                                        VerticalAlignment="Center"
+                                                        MediaTransportControlsHelper.DropoutOrder='3'
+                                                        KeyboardAcceleratorTextOverride="Press ["
+                                                        Margin="0,0,0,0">
+                                                        <FontIcon Glyph='&#xEDE2;' RenderTransformOrigin="0.5,0.5">
+                                                            <FontIcon.RenderTransform>
+                                                                <ScaleTransform ScaleX="-1"/>
+                                                            </FontIcon.RenderTransform>
+                                                        </FontIcon>
+                                                    </AppBarButton>
+
+                                                    <AppBarButton x:Name='MarkOutButton'
+                                                         Label="Mark Out"
+                                                         VerticalAlignment="Center"
+                                                         MediaTransportControlsHelper.DropoutOrder='3'
+                                                         KeyboardAcceleratorTextOverride="Press ]">
+                                                        <AppBarButton.Icon>
+                                                            <FontIcon Glyph='&#xEDE2;' />
+                                                        </AppBarButton.Icon>
+                                                    </AppBarButton>
+
+                                                    <AppBarButton x:Name='ClearMarksButton'
+                                                         Label="Clear Mark In/Out"
+                                                         VerticalAlignment="Center"
+                                                         MediaTransportControlsHelper.DropoutOrder='3'
+                                                         KeyboardAcceleratorTextOverride="Press \">
+                                                        <AppBarButton.Icon>
+                                                            <SymbolIcon Symbol="Clear" />
+                                                        </AppBarButton.Icon>
+                                                    </AppBarButton>
+                                                    
                                                     <AppBarSeparator/>
                                                     <AppBarButton x:Name='AudioTracksSelectionButton'
                                                          LabelPosition="Default"
