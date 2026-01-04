@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="MediaViewer.MiniPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -8,245 +7,458 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
-    mc:Ignorable="d"
-    SizeChanged="Page_SizeChanged">
+    SizeChanged="Page_SizeChanged"
+    MinWidth="300"
+    mc:Ignorable="d">
 
-    
-    <NavigationView x:Name="MainNavigationView"
-                    PaneDisplayMode="Left"
-                    CompactPaneLength="48"
-                    OpenPaneLength="280"
-                    IsBackEnabled="False"
-                    IsBackButtonVisible="Collapsed"
-                    IsSettingsVisible="False">
 
-        <!-- Menu items (left pane) -->
-        <NavigationView.MenuItems>
-            <NavigationViewItem Content="Shuffle play" Icon="Shuffle"/>
-            <NavigationViewItem Content="Artists" Icon="Contact"/>
-            <NavigationViewItem Content="Genres" Icon="List"/>
-            <NavigationViewItem Content="Composers" Icon="ContactInfo"/>
-            <NavigationViewItem Content="Albums" Icon="Library"/>
-            <NavigationViewItem Content="Songs" Icon="MusicInfo"/>
-            <NavigationViewItem Content="Folders" Icon="Folder"/>
-            <NavigationViewItem Content="Playlists" Icon="Library"/>
-            <NavigationViewItem Content="Recently added" Icon="Accept"/>
-            <NavigationViewItem Content="Last played" Icon="Accept"/>
-            <NavigationViewItem Content="Search" Icon="Find"/>
-            <NavigationViewItem Content="Open" Icon="OpenFile"/>
-        </NavigationView.MenuItems>
+    <Grid Background="#222">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="100" />
+        </Grid.RowDefinitions>
 
-        <NavigationView.FooterMenuItems>
-            <NavigationViewItem Content="Settings" Icon="Setting"/>
-        </NavigationView.FooterMenuItems>
+        <!-- Header (now inside NavigationView content) -->
+        <Grid Grid.Row="0" Background="#161616" Padding="8,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-        <!-- Main content (keeps original layout) -->
-        <NavigationView.Content>
-            <Grid Background="#222">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="48" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="100" />
-                </Grid.RowDefinitions>
+            <StackPanel Grid.Column="0" 
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Left" 
+                        VerticalAlignment="Center">
 
-                <!-- Header (now inside NavigationView content) -->
-                <Grid Grid.Row="0" Background="#161616" Padding="8,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <!-- Toggle buttons for narrow view -->
+                <StackPanel x:Name="ViewToggleButtons" Orientation="Horizontal" Visibility="Collapsed">
+                    <ToggleButton x:Name="ShowAlbumArtButton" 
+                                    Background="Transparent" 
+                                    BorderBrush="Transparent" 
+                                    IsChecked="True" 
+                                    Click="ShowAlbumArtButton_Click">
+                        <FontIcon Glyph="&#xE768;" Foreground="#FFF" />
+                    </ToggleButton>
 
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <!-- Toggle buttons for narrow view -->
-                        <StackPanel x:Name="ViewToggleButtons" Orientation="Horizontal" Visibility="Collapsed">
-                            <ToggleButton x:Name="ShowAlbumArtButton" Background="Transparent" BorderBrush="Transparent" IsChecked="True" Click="ShowAlbumArtButton_Click">
-                                <FontIcon Glyph="&#xE768;" Foreground="#FFF" />
-                            </ToggleButton>
-                            
-                            <ToggleButton x:Name="ShowPlaylistButton" Background="Transparent" BorderBrush="Transparent" IsChecked="False" Click="ShowPlaylistButton_Click">
-                                <FontIcon Glyph="&#xE142;" Foreground="#FFF" />
-                            </ToggleButton> 
-                        </StackPanel>
-                    </StackPanel>
+                    <ToggleButton x:Name="ShowPlaylistButton" 
+                                    Background="Transparent" 
+                                    BorderBrush="Transparent" 
+                                    IsChecked="False" 
+                                    Click="ShowPlaylistButton_Click">
+                        <FontIcon Glyph="&#xE142;" Foreground="#FFF" />
+                    </ToggleButton>
+                </StackPanel>
 
-                    <TextBlock Grid.Column="1" Text="" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0" />
-                </Grid>
+                <!-- Playlist Name (Only if user specified) -->
+                <TextBlock  x:Name="WindowTitle"
+                            Text="Playlist" 
+                            Margin="5,0,0,0" 
+                            FontWeight="Bold"
+                            FontSize="18"
+                            VerticalAlignment="Center"/>
 
-                <!-- Main content -->
-                <Grid x:Name="ContentGrid" Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="PlaylistColumn" Width="*" />
-                        <ColumnDefinition x:Name="AlbumArtColumn" Width="auto" />
-                    </Grid.ColumnDefinitions>
+            </StackPanel>
 
-                    <!-- Playlist -->
-                    <Border x:Name="PlaylistView" Grid.Column="0" Background="#2A2A2A" Padding="8" BorderBrush="#1A1A1A" BorderThickness="0,0,1,0">
-                        <ListView Background="Transparent" BorderThickness="0">
-                            <ListViewItem IsSelected="True" Padding="5,5,15,5">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="28" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="64" />
-                                    </Grid.ColumnDefinitions>
-                                    
-                                    <FontIcon Glyph="&#xE768;" Grid.Column="0" VerticalAlignment="Center" />
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="1.  Scarlet Fire" FontWeight="SemiBold" />
-                                        <TextBlock Text="Unknown • Innovations in Booty Shaking Music, Vol. 1" FontSize="12" Opacity="0.7"  />
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="02:23" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                    
-                                </Grid>
-                            </ListViewItem>
-                        </ListView>
-                    </Border>
+            <TextBlock Grid.Column="1" Text="" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0" />
+        </Grid>
 
-                    <!-- Album art -->
-                    <Grid x:Name="AlbumArtView" Grid.Column="1" Background="#2B2B2B">
-                        <Border Width="520" Height="420" Background="#FFF" HorizontalAlignment="Center" VerticalAlignment="Center" BorderThickness="8" BorderBrush="#2B2B2B">
-                            <Grid>
-                                <TextBlock Text="Album Art" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#999" FontSize="20" />
-                            </Grid>
-                        </Border>
-                    </Grid>
+        <!-- Main content -->
+        <Grid x:Name="ContentGrid" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="PlaylistColumn" Width="auto" MinWidth="300" />
+                <ColumnDefinition x:Name="AlbumArtColumn" Width="*" />
+            </Grid.ColumnDefinitions>
 
-                    <toolkit:GridSplitter 
-                               x:Name="ContentSplitter"
-                               Grid.Column="1"
-                               Width="15"
-                               HorizontalAlignment="Left"
-                               ResizeBehavior="BasedOnAlignment"
-                               ResizeDirection="Auto">
-                        <toolkit:GridSplitter.RenderTransform>
-                            <TranslateTransform X="-7" />
-                        </toolkit:GridSplitter.RenderTransform>
-                    </toolkit:GridSplitter>
-                </Grid>
+            <!-- Playlist -->
+            <Border x:Name="PlaylistView" 
+                    Grid.Column="0" 
+                    Background="#2A2A2A" 
+                    Padding="8" 
+                    BorderBrush="#1A1A1A" 
+                    BorderThickness="0,0,1,0">
 
-                <!-- Bottom area: transport UI container -->
-                <Grid Grid.Row="2">
-                    <!-- Single-select transport bar (adopts selected item when in single mode) -->
-                    <Border x:Name="SingleTransportBar" Background="#0F0F0F" BorderBrush="#222" BorderThickness="1,1,1,0" Padding="12" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <ListView Background="Transparent" BorderThickness="0">
+                    <ListView.Header>
+                        <AutoSuggestBox PlaceholderText="Search" QueryIcon="Find" Margin="0,0,0,5"/>
+                    </ListView.Header>
+
+                    <ListViewItem IsSelected="True" Padding="5,5,15,5">
                         <Grid>
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="TransportSizeStates">
-                                    <VisualState x:Name="WideTransport">
-                                        <VisualState.StateTriggers>
-                                            <AdaptiveTrigger MinWindowWidth="600" />
-                                        </VisualState.StateTriggers>
-                                        <VisualState.Setters>
-                                            <!-- Wide layout: Single row with 3 columns -->
-                                            <Setter Target="TransportGrid.RowDefinitions[0].Height" Value="*" />
-                                            <Setter Target="TransportGrid.RowDefinitions[1].Height" Value="0" />
-                                            <Setter Target="LeftControls.(Grid.Row)" Value="0" />
-                                            <Setter Target="LeftControls.(Grid.Column)" Value="0" />
-                                            <Setter Target="CenterControls.(Grid.Row)" Value="0" />
-                                            <Setter Target="CenterControls.(Grid.Column)" Value="1" />
-                                            <Setter Target="CenterControls.(Grid.ColumnSpan)" Value="1" />
-                                            <Setter Target="RightControls.(Grid.Row)" Value="0" />
-                                            <Setter Target="RightControls.(Grid.Column)" Value="2" />
-                                            <Setter Target="RightControls.Visibility" Value="Visible" />
-                                            <Setter Target="TransportTitle.Visibility" Value="Visible" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="NarrowTransport">
-                                        <VisualState.StateTriggers>
-                                            <AdaptiveTrigger MinWindowWidth="0" />
-                                        </VisualState.StateTriggers>
-                                        <VisualState.Setters>
-                                            <!-- Narrow layout: 2 rows, timeline on top spanning full width, controls below -->
-                                            <Setter Target="TransportGrid.RowDefinitions[0].Height" Value="Auto" />
-                                            <Setter Target="TransportGrid.RowDefinitions[1].Height" Value="*" />
-                                            <Setter Target="LeftControls.(Grid.Row)" Value="1" />
-                                            <Setter Target="LeftControls.(Grid.Column)" Value="0" />
-                                            <Setter Target="LeftControls.(Grid.ColumnSpan)" Value="3" />
-                                            <Setter Target="LeftControls.HorizontalAlignment" Value="Center" />
-                                            <Setter Target="CenterControls.(Grid.Row)" Value="0" />
-                                            <Setter Target="CenterControls.(Grid.Column)" Value="0" />
-                                            <Setter Target="CenterControls.(Grid.ColumnSpan)" Value="3" />
-                                            <Setter Target="RightControls.Visibility" Value="Collapsed" />
-                                            <Setter Target="TransportTitle.Visibility" Value="Collapsed" />
-                                            <Setter Target="ProgressGrid.Margin" Value="0" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            
-                            <Grid x:Name="TransportGrid">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="0" />
-                                </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="64" />
+                            </Grid.ColumnDefinitions>
+
+                            <FontIcon Glyph="&#xE768;" 
+                                        Grid.Column="0" 
+                                        VerticalAlignment="Center" />
+
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="1.  Scarlet Fire" 
+                                            FontWeight="SemiBold" />
+                                <TextBlock Text="Unknown • Innovations in Booty Shaking Music, Vol. 1" 
+                                            FontSize="12"
+                                            Opacity="0.7"  />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="2" 
+                                        Text="02:23"
+                                        HorizontalAlignment="Right" 
+                                        VerticalAlignment="Center" />
+                        </Grid>
+                    </ListViewItem>
+
+                </ListView>
+            </Border>
+
+            <!-- Album art -->
+            <Pivot x:Name="AlbumArtView" Background="#2B2B2B" Grid.Column="1">
+
+                <PivotItem Header="Artwork">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="520" Height="420">
+                            <Image x:Name="AlbumArtwork" 
+                                   Stretch="UniformToFill" />
+
+                            <Border x:Name="AlbumPlaceholder"
+                                Background="#FFF" 
+                                HorizontalAlignment="Stretch" 
+                                VerticalAlignment="Stretch" 
+                                BorderThickness="8" 
+                                BorderBrush="#2B2B2B">
+                                <TextBlock Text="Add Album Art" 
+                                    HorizontalAlignment="Center" 
+                                    VerticalAlignment="Center" 
+                                    Foreground="#999" 
+                                    FontSize="20" />
+                            </Border>
+                        </Grid>
+                    </Viewbox>
+                </PivotItem>
+                <PivotItem Header="Lyrics">
+                    <RichEditBox/>
+                </PivotItem>
+                <PivotItem Header="Properties">
+
+                </PivotItem>
+            </Pivot>
+
+            <toolkit:GridSplitter 
+                        x:Name="ContentSplitter"
+                        Grid.Column="1"
+                        Width="15"
+                        HorizontalAlignment="Left"
+                        ResizeBehavior="BasedOnAlignment"
+                        ResizeDirection="Columns">
+
+                <toolkit:GridSplitter.RenderTransform>
+                    <TranslateTransform X="-7" />
+                </toolkit:GridSplitter.RenderTransform>
+            </toolkit:GridSplitter>
+        </Grid>
+
+
+        <!-- Bottom area: transport UI container -->
+        <Grid Grid.Row="2">
+            <!-- Single-select transport bar (adopts selected item when in single mode) -->
+            <Border x:Name="SingleTransportBar" 
+                    Background="#0F0F0F" 
+                    BorderBrush="#222" 
+                    BorderThickness="1,1,1,0" 
+                    Padding="12" 
+                    HorizontalAlignment="Stretch" 
+                    VerticalAlignment="Stretch">
+
+                <Grid>
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="TransportSizeStates">
+                            <VisualState x:Name="WideTransport">
+                                <VisualState.StateTriggers>
+                                    <AdaptiveTrigger MinWindowWidth="600" />
+                                </VisualState.StateTriggers>
+                                <VisualState.Setters>
+                                    <!-- Wide layout: Single row with 3 columns -->
+                                    <Setter Target="TransportGrid.RowDefinitions[0].Height" Value="*" />
+                                    <Setter Target="TransportGrid.RowDefinitions[1].Height" Value="0" />
+                                    <Setter Target="LeftControls.(Grid.Row)" Value="0" />
+                                    <Setter Target="LeftControls.(Grid.Column)" Value="0" />
+                                    <Setter Target="CenterControls.(Grid.Row)" Value="0" />
+                                    <Setter Target="CenterControls.(Grid.Column)" Value="1" />
+                                    <Setter Target="CenterControls.(Grid.ColumnSpan)" Value="1" />
+                                    <Setter Target="RightControls.(Grid.Row)" Value="0" />
+                                    <Setter Target="RightControls.(Grid.Column)" Value="2" />
+                                    <Setter Target="RightControls.Visibility" Value="Visible" />
+                                    <Setter Target="TransportTitle.Visibility" Value="Visible" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="NarrowTransport">
+                                <VisualState.StateTriggers>
+                                    <AdaptiveTrigger MinWindowWidth="0" />
+                                </VisualState.StateTriggers>
+                                <VisualState.Setters>
+                                    <!-- Narrow layout: 2 rows, timeline on top spanning full width, controls below -->
+                                    <Setter Target="TransportGrid.RowDefinitions[0].Height" Value="Auto" />
+                                    <Setter Target="TransportGrid.RowDefinitions[1].Height" Value="*" />
+                                    <Setter Target="LeftControls.(Grid.Row)" Value="1" />
+                                    <Setter Target="LeftControls.(Grid.Column)" Value="0" />
+                                    <Setter Target="LeftControls.(Grid.ColumnSpan)" Value="3" />
+                                    <Setter Target="LeftControls.HorizontalAlignment" Value="Center" />
+                                    <Setter Target="CenterControls.(Grid.Row)" Value="0" />
+                                    <Setter Target="CenterControls.(Grid.Column)" Value="0" />
+                                    <Setter Target="CenterControls.(Grid.ColumnSpan)" Value="3" />
+                                    <Setter Target="RightControls.Visibility" Value="Collapsed" />
+                                    <Setter Target="TransportTitle.Visibility" Value="Collapsed" />
+                                    <Setter Target="ProgressGrid.Margin" Value="0" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+
+                    <Grid x:Name="TransportGrid" ColumnSpacing="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="0" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.Resources>
+                            <Style TargetType="Button" >
+                                <Setter Target="Background" Value="Transparent"/>
+                                <Setter Target="BorderBrush" Value="Transparent"/>
+                            </Style>
+                        </Grid.Resources>
+
+                        <!-- Center: time, progress, title (top row in narrow, middle column in wide) -->
+                        <StackPanel x:Name="CenterControls" 
+                                    Grid.Row="0" 
+                                    Grid.Column="1" 
+                                    Orientation="Vertical" 
+                                    VerticalAlignment="Center" 
+                                    HorizontalAlignment="Stretch">
+
+                            <TextBlock x:Name="TransportTitle" 
+                                        Text="Unknown - Scarlet Fire" 
+                                        FontWeight="SemiBold" 
+                                        HorizontalAlignment="Center" 
+                                        Margin="0,0,0,6" />
+
+                            <Grid x:Name="ProgressGrid" ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.Resources>
-                                    <Style TargetType="Button" >
-                                        <Setter Target="Background" Value="Transparent"/>
-                                        <Setter Target="BorderBrush" Value="Transparent"/>
-                                    </Style>
-                                </Grid.Resources>
 
-                                <!-- Center: time, progress, title (top row in narrow, middle column in wide) -->
-                                <StackPanel x:Name="CenterControls" Grid.Row="0" Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" HorizontalAlignment="Stretch">
-                                    <TextBlock x:Name="TransportTitle" Text="Unknown - Scarlet Fire" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,6" />
-                                   
-                                    <Grid x:Name="ProgressGrid" ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        
-                                        <TextBlock x:Name="CurrentTimeTextTransport" Text="00:00" VerticalAlignment="Center" FontSize="12" />
-                                        
-                                        <Slider x:Name="TransportProgressSlider" Grid.Column="1" Minimum="0" Maximum="100" Value="0" />
-                                        
-                                        <TextBlock x:Name="TotalTimeTextTransport" Grid.Column="2" Text="02:22" VerticalAlignment="Center" FontSize="12" />
-                                    </Grid>
-                                </StackPanel>
+                                <TextBlock x:Name="CurrentTimeTextTransport" 
+                                            Text="00:00" 
+                                            VerticalAlignment="Center" 
+                                            FontSize="12" />
 
-                                <!-- Left controls: prev/play/next (bottom row in narrow, left column in wide) -->
-                                <StackPanel x:Name="LeftControls" Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Spacing="12">
-                                    <Button x:Name="PrevButton" Width="48" Height="48">
-                                        <FontIcon Glyph="&#xE100;" FontSize="20"/>
-                                    </Button>
-                                    <Button x:Name="PlayPauseButtonTransport" Width="56" Height="56">
-                                        <FontIcon Glyph="&#xE768;" FontSize="24" />
-                                    </Button>
-                                    <Button x:Name="NextButton" Width="48" Height="48">
-                                        <FontIcon Glyph="&#xE893;" FontSize="20"/>
-                                    </Button>
-                                </StackPanel>
+                                <Slider x:Name="TransportProgressSlider" 
+                                        Grid.Column="1" 
+                                        Minimum="0"
+                                        Maximum="100" 
+                                        Value="0" />
 
-                                <!-- Right controls: repeat/shuffle/volume/more (hidden in narrow, right column in wide) -->
-                                <StackPanel x:Name="RightControls" Grid.Row="0" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="12">
-                                    <Button x:Name="RepeatButton">
-                                        <FontIcon Glyph="&#xE8EE;"/>
-                                    </Button>
-                                    <Button x:Name="ShuffleButton">
-                                        <FontIcon Glyph="&#xE8B1;" />
-                                    </Button>
-                                    <Button x:Name="VolumeButton">
-                                        <FontIcon Glyph="&#xE993;" />
-                                    </Button>
-                                    <Button x:Name="MoreButton">
-                                        <FontIcon Glyph="&#xE712;" />
-                                    </Button>
-                                </StackPanel>
+                                <TextBlock x:Name="TotalTimeTextTransport" 
+                                            Grid.Column="2"
+                                            Text="02:22" 
+                                            VerticalAlignment="Center" 
+                                            FontSize="12" />
                             </Grid>
-                        </Grid>
-                    </Border>
+                        </StackPanel>
 
-                    <!-- Per-item AudioPlayer reserved for each playlist item. Keep collapsed by default; code will show/hide as needed. -->
-                    <controls:AudioPlayer x:Name="AudioPlay" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                        <!-- Left controls: prev/play/next (bottom row in narrow, left column in wide) -->
+                        <StackPanel x:Name="LeftControls" 
+                                    Grid.Row="0" 
+                                    Grid.Column="0" 
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center" 
+                                    HorizontalAlignment="Left" 
+                                    Spacing="12">
+
+                            <Button x:Name="PrevButton" 
+                                    Width="48" 
+                                    Height="48">
+                                <FontIcon Glyph="&#xE100;" 
+                                            FontSize="20"/>
+                            </Button>
+
+                            <Button x:Name="PlayPauseButtonTransport" 
+                                    Width="56" 
+                                    Height="56">
+                                <FontIcon Glyph="&#xE768;" FontSize="24" />
+                            </Button>
+
+                            <Button x:Name="NextButton" 
+                                    Width="48" 
+                                    Height="48">
+
+                                <FontIcon Glyph="&#xE893;" FontSize="20"/>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Right controls: repeat/shuffle/volume/more (hidden in narrow, right column in wide) -->
+                        <StackPanel x:Name="RightControls" 
+                                    Grid.Row="0" 
+                                    Grid.Column="2" 
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center" 
+                                    HorizontalAlignment="Right" 
+                                    Spacing="12">
+
+                            <Button x:Name="RepeatButton">
+                                <FontIcon Glyph="&#xE8EE;"/>
+                            </Button>
+
+                            <Button x:Name="ShuffleButton">
+                                <FontIcon Glyph="&#xE8B1;" />
+                            </Button>
+
+                            <Button x:Name="VolumeButton">
+                                <FontIcon Glyph="&#xE993;" />
+                            </Button>
+
+                            <Button x:Name="MoreButton">
+                                <Button.Content>
+                                    <FontIcon Glyph="&#xE712;" />
+                                </Button.Content>
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Edit">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Edit"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutSeparator/>
+
+                                        <MenuFlyoutItem Text="Copy File">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Copy"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem Text="Copy as Path">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xE62F;"/>
+                                            </MenuFlyoutItem.Icon>
+                                            <MenuFlyoutItem.KeyboardAccelerators>
+                                                <KeyboardAccelerator Modifiers="Control" Key="C"/>
+                                            </MenuFlyoutItem.KeyboardAccelerators>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem Text="Show in File Explorer">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="OpenFile"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutSeparator/>
+
+                                        <MenuFlyoutItem Text="Save Playlist">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="SaveLocal"/>
+                                            </MenuFlyoutItem.Icon>
+                                            <MenuFlyoutItem.KeyboardAccelerators>
+                                                <KeyboardAccelerator Modifiers="Control" Key="S"/>
+                                            </MenuFlyoutItem.KeyboardAccelerators>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem Text="Add to Playlist">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Add"/>
+                                            </MenuFlyoutItem.Icon>
+                                            <MenuFlyoutItem.KeyboardAccelerators>
+                                                <KeyboardAccelerator Modifiers="Control" Key="A"/>
+                                            </MenuFlyoutItem.KeyboardAccelerators>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem Text="Clear Playlist">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Clear"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutSeparator/>
+
+
+                                        <MenuFlyoutSubItem Text="Playback Rate">
+                                            <MenuFlyoutSubItem.Icon>
+                                                <FontIcon Glyph="&#xEC57;"/>
+                                            </MenuFlyoutSubItem.Icon>
+                                            <MenuFlyoutSubItem.Items>
+                                                <RadioMenuFlyoutItem Text="0.25" GroupName="PlaybackRate"/>
+                                                <RadioMenuFlyoutItem Text="0.50" GroupName="PlaybackRate"/>
+                                                <RadioMenuFlyoutItem Text="1.00" GroupName="PlaybackRate" IsChecked="True" />
+                                                <RadioMenuFlyoutItem Text="1.25" GroupName="PlaybackRate"/>
+                                                <RadioMenuFlyoutItem Text="1.50" GroupName="PlaybackRate"/>
+                                                <RadioMenuFlyoutItem Text="1.75" GroupName="PlaybackRate"/>
+                                                <RadioMenuFlyoutItem Text="2.00" GroupName="PlaybackRate"/>
+                                            </MenuFlyoutSubItem.Items>
+                                        </MenuFlyoutSubItem>
+
+                                        
+                                        <MenuFlyoutSubItem Text="Reverb">
+                                            <MenuFlyoutSubItem.Icon>
+                                                <FontIcon Glyph="&#xE93E;"/>
+                                            </MenuFlyoutSubItem.Icon>
+                                            <MenuFlyoutSubItem.Items>
+                                                <MenuFlyoutItem>
+                                                    <MenuFlyoutItem.Template>
+                                                        <ControlTemplate>
+                                                            <StackPanel Padding="15,15,15,5" Spacing="5">
+                                                                <ToggleSwitch OnContent="Enabled" 
+                                                                              OffContent="Enabled"
+                                                                              HorizontalAlignment="Left"/>
+
+                                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                                    <Slider
+                                                                        Header="Amount"
+                                                                        Width="180"
+                                                                        Minimum="0"
+                                                                        Maximum="100"
+                                                                        Value=""
+                                                                        SmallChange="1"
+                                                                        LargeChange="10"/>
+
+                                                                    <TextBlock Text="%" 
+                                                                        VerticalAlignment="Center"
+                                                                        Margin="0,15,0,0"
+                                                                        FontSize="22"/>
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                        </ControlTemplate>
+                                                    </MenuFlyoutItem.Template>
+                                                </MenuFlyoutItem>
+                                            </MenuFlyoutSubItem.Items>
+                                        </MenuFlyoutSubItem>
+
+                                        <MenuFlyoutSeparator/>
+
+                                        <MenuFlyoutItem Text="Settings">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Setting"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+
+                        </StackPanel>
+                    </Grid>
                 </Grid>
-            </Grid>
-        </NavigationView.Content>
+            </Border>
 
-    </NavigationView>
+            <!-- Per-item AudioPlayer reserved for each playlist item. Keep collapsed by default; code will show/hide as needed. -->
+            <controls:AudioPlayer x:Name="AudioPlay" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+        </Grid>
+    </Grid>
+
 </Page>

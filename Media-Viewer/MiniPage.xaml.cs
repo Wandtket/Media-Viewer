@@ -88,8 +88,8 @@ namespace MediaViewer
             AlbumArtView.SetValue(Grid.ColumnProperty, 1);
             AlbumArtView.ClearValue(Grid.ColumnSpanProperty);
             
-            PlaylistColumn.Width = new GridLength(1, GridUnitType.Star);
-            AlbumArtColumn.Width = new GridLength(1, GridUnitType.Auto);
+            PlaylistColumn.Width = GridLength.Auto;
+            AlbumArtColumn.Width = new GridLength(1, GridUnitType.Star);
         }
 
         private void SetupNarrowView()
@@ -118,28 +118,89 @@ namespace MediaViewer
             
             RightControls.SetValue(Grid.RowProperty, 0);
             RightControls.SetValue(Grid.ColumnProperty, 2);
+            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
             RightControls.Visibility = Visibility.Visible;
+            RightControls.Spacing = 12;
             
+            // Remove any additional stack panels created for narrow view
+            var extraStackPanels = TransportGrid.Children.OfType<StackPanel>()
+                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
+                .ToList();
+            foreach (var sp in extraStackPanels)
+            {
+                // Remove buttons from the extra panel before removing the panel
+                sp.Children.Clear();
+                TransportGrid.Children.Remove(sp);
+            }
+            
+            // Clear and restore original button order for wide view
+            RightControls.Children.Clear();
+            RightControls.Children.Add(RepeatButton);
+            RightControls.Children.Add(ShuffleButton);
+            RightControls.Children.Add(VolumeButton);
+            RightControls.Children.Add(MoreButton);
+                        
             TransportTitle.Visibility = Visibility.Visible;
             ProgressGrid.Margin = new Thickness(0);
         }
 
         private void SetupNarrowTransport()
         {
-            // Narrow transport: 2 rows, timeline on top spanning full width, controls below
+            // Narrow transport: 2 rows
+            // Row 0: Timeline spanning full width
+            // Row 1: [Shuffle, Repeat] - [Prev, Play, Next] - [Volume, More]
             TransportGrid.RowDefinitions[0].Height = GridLength.Auto;
             TransportGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
             
-            LeftControls.SetValue(Grid.RowProperty, 1);
-            LeftControls.SetValue(Grid.ColumnProperty, 0);
-            LeftControls.SetValue(Grid.ColumnSpanProperty, 3);
-            LeftControls.HorizontalAlignment = HorizontalAlignment.Center;
-            
+            // Timeline at top spanning all columns
             CenterControls.SetValue(Grid.RowProperty, 0);
             CenterControls.SetValue(Grid.ColumnProperty, 0);
             CenterControls.SetValue(Grid.ColumnSpanProperty, 3);
             
-            RightControls.Visibility = Visibility.Collapsed;
+            // Play controls at bottom center
+            LeftControls.SetValue(Grid.RowProperty, 1);
+            LeftControls.SetValue(Grid.ColumnProperty, 1);
+            LeftControls.ClearValue(Grid.ColumnSpanProperty);
+            LeftControls.HorizontalAlignment = HorizontalAlignment.Center;
+            
+            // Right controls split: Shuffle & Repeat on left, Volume & More on right
+            RightControls.SetValue(Grid.RowProperty, 1);
+            RightControls.SetValue(Grid.ColumnProperty, 0);
+            RightControls.ClearValue(Grid.ColumnSpanProperty);
+            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
+            RightControls.Visibility = Visibility.Visible;
+            RightControls.Spacing = 8;
+            
+            // Remove any existing extra stack panels before creating new one
+            var existingExtraPanels = TransportGrid.Children.OfType<StackPanel>()
+                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
+                .ToList();
+            foreach (var panel in existingExtraPanels)
+            {
+                panel.Children.Clear();
+                TransportGrid.Children.Remove(panel);
+            }
+            
+            // Reorder buttons: Shuffle, Repeat on left side
+            RightControls.Children.Clear();
+            RightControls.Children.Add(ShuffleButton);
+            RightControls.Children.Add(RepeatButton);
+            
+            // Create a new stack for Volume and More on the right side
+            var rightSideControls = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Spacing = 8
+            };
+            rightSideControls.Children.Add(VolumeButton);
+            rightSideControls.Children.Add(MoreButton);
+            rightSideControls.SetValue(Grid.RowProperty, 1);
+            rightSideControls.SetValue(Grid.ColumnProperty, 2);
+            
+            TransportGrid.Children.Add(rightSideControls);          
+            
             TransportTitle.Visibility = Visibility.Collapsed;
             ProgressGrid.Margin = new Thickness(0);
         }
