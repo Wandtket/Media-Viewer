@@ -135,6 +135,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7175" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.1" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
     <PackageReference Include="TouchInputSimulator" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>
