@@ -3,6 +3,7 @@ using MediaViewer.Controls;
 using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
 using MediaViewer.Extensions;
+using MediaViewer.Models;
 using MediaViewer.Pages;
 using Microsoft.UI.Xaml;
 using Microsoft.Win32.SafeHandles;
@@ -20,6 +21,7 @@ using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
 using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
 using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
+using SortEntry = MediaViewer.Extensions.SortEntry;
 
 
 // To learn more about WinUI, the WinUI project structure,

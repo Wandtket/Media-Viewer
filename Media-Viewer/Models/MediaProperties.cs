@@ -1,16 +1,14 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
-using MediaViewer.Models;
 using MediaViewer.Extensions;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
-using Windows.Graphics.Imaging;
 using Windows.Storage;
-using Windows.Storage.Streams;
+using File = System.IO.File;
 
 namespace MediaViewer.Models
 {
@@ -49,34 +47,63 @@ namespace MediaViewer.Models
 
 
         [ObservableProperty]
-        [PropertyTopic("System.Title")]
+        [PropertyTopic("Title")]
         private string? title;
         partial void OnTitleChanged(string? value) { SaveTopicValue(Path, nameof(title), value); }
 
 
         [ObservableProperty]
-        [PropertyTopic("System.Subject")]
+        [PropertyTopic("Description")]
         private string? subject;
         partial void OnSubjectChanged(string? value) { SaveTopicValue(Path, nameof(subject), value); }
 
 
         [ObservableProperty]
-        [PropertyTopic("System.Author")]
+        [PropertyTopic("FirstAlbumArtist")]
         private string? author;
         partial void OnAuthorChanged(string? value) { SaveTopicValue(Path, nameof(author), value); }
 
 
         [ObservableProperty]
-        [PropertyTopic("System.Comment")]
+        [PropertyTopic("Comment")]
         private string? comments;
         partial void OnCommentsChanged(string? value) { SaveTopicValue(Path, nameof(comments), value); }
 
 
         [ObservableProperty]
-        [PropertyTopic("System.Rating")]
+        [PropertyTopic("Rating")]
         private UInt32? rating;
         partial void OnRatingChanged(UInt32? value) { SaveTopicValue(Path, nameof(rating), value); }
 
+
+        [ObservableProperty]
+        [PropertyTopic("Album")]
+        private string? album;
+        partial void OnAlbumChanged(string? value) { SaveTopicValue(Path, nameof(album), value); }
+
+
+        [ObservableProperty]
+        [PropertyTopic("FirstGenre")]
+        private string? genre;
+        partial void OnGenreChanged(string? value) { SaveTopicValue(Path, nameof(genre), value); }
+
+
+        [ObservableProperty]
+        [PropertyTopic("Year")]
+        private UInt32? year;
+        partial void OnYearChanged(UInt32? value) { SaveTopicValue(Path, nameof(year), value); }
+
+
+        [ObservableProperty]
+        [PropertyTopic("Track")]
+        private UInt32? track;
+        partial void OnTrackChanged(UInt32? value) { SaveTopicValue(Path, nameof(track), value); }
+
+
+        [ObservableProperty]
+        [PropertyTopic("Lyrics")]
+        private string? lyrics;
+        partial void OnLyricsChanged(string? value) { SaveTopicValue(Path, nameof(lyrics), value); }
 
 
         [ObservableProperty]
@@ -111,16 +138,13 @@ namespace MediaViewer.Models
 
 
         /// <summary>
-        /// Retrieves properties associated with the file.
-        /// https://learn.microsoft.com/en-us/windows/win32/properties/core-bumper
+        /// Retrieves properties associated with the file using TagLibSharp.
         /// </summary>
         /// <param name="File"></param>
         private async void GetProperties(StorageFile File)
         {
             try
             {
-                var BasicProperties = await File.GetBasicPropertiesAsync();
-
                 FileName = File.DisplayName + File.FileType;
                 DisplayName = File.DisplayName;
                 Extension = File.FileType;
@@ -129,78 +153,372 @@ namespace MediaViewer.Models
                 MediaType = Files.GetMediaType(File.Path);
                 DetermineMetaDataSupport();
 
-                DateModified = BasicProperties.DateModified.DateTime;
-                TimeModified = BasicProperties.DateModified.TimeOfDay;
-                Size = BasicProperties.Size.toByteString();
-
-                Title = NormalizeToString(await FetchTopicValue(File, GetPropertyTopic(nameof(title))));
-                Subject = NormalizeToString(await FetchTopicValue(File, GetPropertyTopic(nameof(subject))));
-                Rating = NormalizeToUInt32(await FetchTopicValue(File, GetPropertyTopic(nameof(rating))));
-                Author = NormalizeToString(await FetchTopicValue(File, GetPropertyTopic(nameof(author))));
-                Comments = NormalizeToString(await FetchTopicValue(File, GetPropertyTopic(nameof(comments))));
+                // Get basic file system properties
+                var fileInfo = new FileInfo(File.Path);
+                DateModified = fileInfo.LastWriteTime;
+                TimeModified = fileInfo.LastWriteTime.TimeOfDay;
+                Size = ((ulong)fileInfo.Length).toByteString();
 
                 if (File.Path.StartsWith("C")) { Source = "This PC"; }
                 else if (File.Path.StartsWith("http")) { Source = "Web"; }
                 else { Source = "Network"; }
 
-                if (MediaType == MediaType.Image ||
-                    MediaType == MediaType.Gif)
-                {
-                    var ImageProperties = await File.Properties.GetImagePropertiesAsync();
-                    using (IRandomAccessStream stream = await File.OpenAsync(FileAccessMode.Read))
-                    {
-                        BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+                // Check if this is an image file with poor TagLib support
+                string ext = System.IO.Path.GetExtension(File.Path).ToUpperInvariant();
+                bool useFallback = ext == ".PNG" || ext == ".BMP" || ext == ".WEBP";
 
-                        var pixelFormat = decoder.BitmapPixelFormat;
-                        int bitsPerPixel = pixelFormat switch
+                // Use TagLibSharp to read media properties
+                using (var tagFile = TagLib.File.Create(File.Path))
+                {
+                    var tag = tagFile.Tag;
+
+                    // For formats with poor TagLib support, read metadata from Windows API instead
+                    if (useFallback && (MediaType == MediaType.Image || MediaType == MediaType.Gif))
+                    {
+                        await ReadMetadataWithWindowsAPI(File);
+                    }
+                    else
+                    {
+                        // Extract metadata using TagLib
+                        Title = string.IsNullOrWhiteSpace(tag.Title) ? null : tag.Title;
+                        Subject = string.IsNullOrWhiteSpace(tag.Description) ? null : tag.Description;
+                        Author = tag.FirstAlbumArtist ?? tag.FirstPerformer;
+                        Comments = string.IsNullOrWhiteSpace(tag.Comment) ? null : tag.Comment;
+                        
+                        // Extract additional metadata
+                        Album = string.IsNullOrWhiteSpace(tag.Album) ? null : tag.Album;
+                        Genre = tag.FirstGenre;
+                        Year = tag.Year > 0 ? tag.Year : null;
+                        Track = tag.Track > 0 ? tag.Track : null;
+                        Lyrics = string.IsNullOrWhiteSpace(tag.Lyrics) ? null : tag.Lyrics;
+                        
+                        // Extract rating using format-specific logic
+                        Rating = ReadRating(tagFile);
+                    }
+
+                    var properties = tagFile.Properties;
+
+                    if (MediaType == MediaType.Image ||
+                        MediaType == MediaType.Gif)
+                    {
+                        if (properties.PhotoWidth > 0 && properties.PhotoHeight > 0)
                         {
-                            BitmapPixelFormat.Bgra8 => 32,
-                            BitmapPixelFormat.Rgba8 => 32,
-                            BitmapPixelFormat.Rgba16 => 64,
-                            BitmapPixelFormat.Gray8 => 8,
-                            BitmapPixelFormat.Gray16 => 16,
-                            BitmapPixelFormat.Nv12 => 12,  // Special case for YUV
-                            _ => 32 // default assumption
-                        };
+                            Resolution = $"{properties.PhotoWidth} x {properties.PhotoHeight}";
+                            AspectRatio = CalculateAspectRatio(properties.PhotoWidth, properties.PhotoHeight);
+                        }
 
-                        bool hasAlpha = pixelFormat == BitmapPixelFormat.Bgra8 ||
-                                          pixelFormat == BitmapPixelFormat.Rgba8 ||
-                                          pixelFormat == BitmapPixelFormat.Rgba16;
+                        // Photo quality/bit depth
+                        if (properties.BitsPerSample > 0)
+                        {
+                            BitDepth = $"{properties.BitsPerSample} bit";
+                        }
 
-                        int windowsReportedBitDepth = hasAlpha ? 24 : 32;
-                        if (pixelFormat == BitmapPixelFormat.Rgba16) windowsReportedBitDepth = 64;
-
-                        DPI = decoder.DpiX.ToString() + " dpi";
-                        Resolution = ImageProperties.Width + " x " + ImageProperties.Height;
-                        AspectRatio = CalculateAspectRatio((int)ImageProperties.Width, (int)ImageProperties.Height);
-                        BitDepth = windowsReportedBitDepth.ToString() + " bit";
-
-                        stream.Dispose();
+                        // DPI information (if available through codec-specific properties)
+                        if (tagFile is TagLib.Image.File imageFile)
+                        {
+                            var imageTag = imageFile.ImageTag;
+                            // Some formats might have DPI info, typically 72 or 96 for digital images
+                            DPI = "96 dpi"; // Default fallback
+                        }
                     }
-                }
-                else if (MediaType == MediaType.Video)
-                {
-                    var VideoProperties = await File.Properties.GetVideoPropertiesAsync();
-                    var propsToRetrieve = new[] { "System.Video.FrameRate" };
-
-                    IDictionary<string, object> props =
-                            await File.Properties.RetrievePropertiesAsync(propsToRetrieve);
-
-                    if (props.ContainsKey("System.Video.FrameRate"))
+                    else if (MediaType == MediaType.Video)
                     {
-                        uint rawFrameRateX1000 = (uint)props["System.Video.FrameRate"];
-                        double frameRate = rawFrameRateX1000 / 1000.0;
-                        DPI = frameRate.ToString();
-                    }
+                        if (properties.VideoWidth > 0 && properties.VideoHeight > 0)
+                        {
+                            Resolution = $"{properties.VideoWidth} x {properties.VideoHeight}";
+                            AspectRatio = CalculateAspectRatio(properties.VideoWidth, properties.VideoHeight);
+                        }
 
-                    Resolution = VideoProperties.Width + " x " + VideoProperties.Height;
-                    AspectRatio = CalculateAspectRatio((int)VideoProperties.Width, (int)VideoProperties.Height);
+                        // Video-specific properties
+                        if (properties.Duration > TimeSpan.Zero)
+                        {
+                            // Duration is available in properties.Duration if needed elsewhere
+                        }
+
+                        // For video resolution description (e.g., "1080p")
+                        DPI = properties.VideoHeight > 0 ? $"{properties.VideoHeight}p" : string.Empty;
+                    }
+                    else if (MediaType == MediaType.Audio)
+                    {
+                        // Audio-specific properties
+                        if (properties.AudioBitrate > 0)
+                        {
+                            BitDepth = $"{properties.AudioBitrate} kbps";
+                        }
+
+                        if (properties.AudioSampleRate > 0)
+                        {
+                            DPI = $"{properties.AudioSampleRate / 1000.0:F1} kHz";
+                        }
+                    }
                 }
+            }
+            catch (TagLib.CorruptFileException ex)
+            {
+                await ErrorBox.Show(ex, Title: "Corrupt Media File");
+            }
+            catch (TagLib.UnsupportedFormatException ex)
+            {
+                await ErrorBox.Show(ex, Title: "Unsupported Format");
             }
             catch (Exception ex)
             {
                 await ErrorBox.Show(ex, Title: "Error Retrieving Media Properties");
             }
+        }
+
+        /// <summary>
+        /// Reads metadata using Windows Storage API for formats that TagLibSharp doesn't support well.
+        /// </summary>
+        private async System.Threading.Tasks.Task ReadMetadataWithWindowsAPI(StorageFile file)
+        {
+            try
+            {
+                var propsToRetrieve = new[] 
+                { 
+                    "System.Title", 
+                    "System.Subject", 
+                    "System.Author", 
+                    "System.Comment", 
+                    "System.Rating" 
+                };
+
+                IDictionary<string, object> props = await file.Properties.RetrievePropertiesAsync(propsToRetrieve);
+
+                if (props.TryGetValue("System.Title", out object titleValue) && titleValue != null)
+                {
+                    Title = titleValue.ToString();
+                }
+
+                if (props.TryGetValue("System.Subject", out object subjectValue) && subjectValue != null)
+                {
+                    Subject = subjectValue.ToString();
+                }
+
+                if (props.TryGetValue("System.Author", out object authorValue) && authorValue != null)
+                {
+                    if (authorValue is string[] authorArray && authorArray.Length > 0)
+                    {
+                        Author = authorArray[0];
+                    }
+                    else
+                    {
+                        Author = authorValue.ToString();
+                    }
+                }
+
+                if (props.TryGetValue("System.Comment", out object commentValue) && commentValue != null)
+                {
+                    Comments = commentValue.ToString();
+                }
+
+                if (props.TryGetValue("System.Rating", out object ratingValue) && ratingValue != null)
+                {
+                    if (ratingValue is uint ratingUint)
+                    {
+                        Rating = ratingUint;
+                    }
+                    else if (uint.TryParse(ratingValue.ToString(), out uint parsed))
+                    {
+                        Rating = parsed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to read metadata with Windows API: {ex.Message}");
+            }
+        }
+
+
+        /// <summary>
+        /// Reads rating from media file using format-specific implementations.
+        /// Returns Windows-compatible rating value (0-99).
+        /// </summary>
+        private static uint? ReadRating(TagLib.File file)
+        {
+            try
+            {
+                // MP3 files with ID3v2 tags
+                if (file is TagLib.Mpeg.AudioFile mpegFile)
+                {
+                    var id3v2Tag = mpegFile.GetTag(TagLib.TagTypes.Id3v2) as TagLib.Id3v2.Tag;
+                    if (id3v2Tag != null)
+                    {
+                        // Try to read POPM (Popularimeter) frame
+                        var popmFrame = TagLib.Id3v2.PopularimeterFrame.Get(id3v2Tag, "Windows Media Player 9 Series", false);
+                        if (popmFrame != null && popmFrame.Rating > 0)
+                        {
+                            // ID3v2 POPM uses 0-255, convert to Windows 0-99 scale
+                            return ConvertFromId3Rating(popmFrame.Rating);
+                        }
+                    }
+                }
+                // WMA files
+                else if (file is TagLib.Asf.File asfFile)
+                {
+                    var asfTag = asfFile.GetTag(TagLib.TagTypes.Asf) as TagLib.Asf.Tag;
+                    if (asfTag != null)
+                    {
+                        // WMA uses "WM/SharedUserRating" which is 0-99
+                        var ratingDesc = asfTag.GetDescriptorStrings("WM/SharedUserRating").FirstOrDefault();
+                        if (ratingDesc != null && uint.TryParse(ratingDesc, out uint wmaRating))
+                        {
+                            return wmaRating;
+                        }
+                    }
+                }
+                // FLAC files
+                else if (file is TagLib.Flac.File flacFile)
+                {
+                    var xiph = flacFile.GetTag(TagLib.TagTypes.Xiph) as TagLib.Ogg.XiphComment;
+                    if (xiph != null)
+                    {
+                        // FMPS_Rating is 0.0-1.0 scale
+                        var ratingStr = xiph.GetFirstField("FMPS_RATING");
+                        if (ratingStr != null && double.TryParse(ratingStr, out double flacRating))
+                        {
+                            // Convert 0.0-1.0 to 0-99
+                            return (uint)(flacRating * 99);
+                        }
+                    }
+                }
+                // OGG Vorbis files
+                else if (file is TagLib.Ogg.File oggFile)
+                {
+                    var xiph = oggFile.GetTag(TagLib.TagTypes.Xiph) as TagLib.Ogg.XiphComment;
+                    if (xiph != null)
+                    {
+                        var ratingStr = xiph.GetFirstField("FMPS_RATING");
+                        if (ratingStr != null && double.TryParse(ratingStr, out double oggRating))
+                        {
+                            return (uint)(oggRating * 99);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // If reading rating fails, return null
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Writes rating to media file using format-specific implementations.
+        /// Accepts Windows-compatible rating value (0-99).
+        /// </summary>
+        private static void WriteRating(TagLib.File file, uint? rating)
+        {
+            try
+            {
+                // MP3 files with ID3v2 tags
+                if (file is TagLib.Mpeg.AudioFile mpegFile)
+                {
+                    var id3v2Tag = mpegFile.GetTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2.Tag;
+                    if (id3v2Tag != null)
+                    {
+                        // Set POPM (Popularimeter) frame
+                        var popmFrame = TagLib.Id3v2.PopularimeterFrame.Get(id3v2Tag, "Windows Media Player 9 Series", true);
+                        if (rating.HasValue && rating.Value > 0)
+                        {
+                            popmFrame.Rating = ConvertToId3Rating(rating.Value);
+                        }
+                        else
+                        {
+                            // Remove the frame if rating is 0 or null
+                            id3v2Tag.RemoveFrame(popmFrame);
+                        }
+                    }
+                }
+                // WMA files
+                else if (file is TagLib.Asf.File asfFile)
+                {
+                    var asfTag = asfFile.GetTag(TagLib.TagTypes.Asf, true) as TagLib.Asf.Tag;
+                    if (asfTag != null)
+                    {
+                        if (rating.HasValue && rating.Value > 0)
+                        {
+                            // WMA uses "WM/SharedUserRating" (0-99)
+                            asfTag.SetDescriptorStrings(new[] { rating.Value.ToString() }, "WM/SharedUserRating");
+                        }
+                        else
+                        {
+                            asfTag.RemoveDescriptors("WM/SharedUserRating");
+                        }
+                    }
+                }
+                // FLAC files
+                else if (file is TagLib.Flac.File flacFile)
+                {
+                    var xiph = flacFile.GetTag(TagLib.TagTypes.Xiph, true) as TagLib.Ogg.XiphComment;
+                    if (xiph != null)
+                    {
+                        if (rating.HasValue && rating.Value > 0)
+                        {
+                            // Convert 0-99 to 0.0-1.0 scale
+                            double flacRating = rating.Value / 99.0;
+                            xiph.SetField("FMPS_RATING", flacRating.ToString("F2"));
+                        }
+                        else
+                        {
+                            xiph.RemoveField("FMPS_RATING");
+                        }
+                    }
+                }
+                // OGG Vorbis files
+                else if (file is TagLib.Ogg.File oggFile)
+                {
+                    var xiph = oggFile.GetTag(TagLib.TagTypes.Xiph, true) as TagLib.Ogg.XiphComment;
+                    if (xiph != null)
+                    {
+                        if (rating.HasValue && rating.Value > 0)
+                        {
+                            double oggRating = rating.Value / 99.0;
+                            xiph.SetField("FMPS_RATING", oggRating.ToString("F2"));
+                        }
+                        else
+                        {
+                            xiph.RemoveField("FMPS_RATING");
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Silently fail if writing rating is not supported
+            }
+        }
+
+        /// <summary>
+        /// Converts ID3v2 POPM rating (0-255) to Windows rating (0-99).
+        /// Uses standard mapping: 1-31=1, 32-95=13, 96-159=38, 160-223=63, 224-255=88
+        /// </summary>
+        private static uint ConvertFromId3Rating(byte id3Rating)
+        {
+            if (id3Rating == 0) return 0;
+            if (id3Rating >= 1 && id3Rating <= 31) return 1;
+            if (id3Rating >= 32 && id3Rating <= 95) return 13;
+            if (id3Rating >= 96 && id3Rating <= 159) return 38;
+            if (id3Rating >= 160 && id3Rating <= 223) return 63;
+            if (id3Rating >= 224) return 88;
+            return 0;
+        }
+
+        /// <summary>
+        /// Converts Windows rating (0-99) to ID3v2 POPM rating (0-255).
+        /// Uses standard mapping aligned with Windows Media Player.
+        /// </summary>
+        private static byte ConvertToId3Rating(uint windowsRating)
+        {
+            if (windowsRating == 0) return 0;
+            if (windowsRating >= 1 && windowsRating <= 12) return 1;
+            if (windowsRating >= 13 && windowsRating <= 37) return 64;
+            if (windowsRating >= 38 && windowsRating <= 62) return 128;
+            if (windowsRating >= 63 && windowsRating <= 87) return 196;
+            if (windowsRating >= 88) return 255;
+            return 0;
         }
 
 
@@ -281,66 +599,6 @@ namespace MediaViewer.Models
 
 
         /// <summary>
-        /// Normalize property values to a single string.
-        /// Handles string, string[], IEnumerable<object>, and other values.
-        /// </summary>
-        private static string? NormalizeToString(object? value)
-        {
-            if (value == null) return null;
-
-            switch (value)
-            {
-                case string s:
-                    return s;
-                case string[] sa:
-                    return sa.Length == 1 ? sa[0] : string.Join("; ", sa);
-                case IEnumerable<object> eo:
-                    return string.Join("; ", eo.Select(o => o?.ToString() ?? string.Empty).Where(x => !string.IsNullOrEmpty(x)));
-                default:
-                    return value.ToString();
-            }
-        }
-
-        /// <summary>
-        /// Normalize property values to nullable UInt32 (for rating and similar numeric properties).
-        /// Accepts numeric types, numeric strings or string[] where first element is numeric.
-        /// </summary>
-        private static uint? NormalizeToUInt32(object? value)
-        {
-            if (value == null) return null;
-
-            switch (value)
-            {
-                case uint u:
-                    return u;
-                case int i when i >= 0:
-                    return (uint)i;
-                case long l when l >= 0:
-                    return (uint)l;
-                case ushort us:
-                    return us;
-                case string s when uint.TryParse(s, out var parsedFromString):
-                    return parsedFromString;
-                case string[] sa when sa.Length > 0 && uint.TryParse(sa[0], out var parsedFromArray):
-                    return parsedFromArray;
-                case IEnumerable<object> eo:
-                    var first = eo.FirstOrDefault()?.ToString();
-                    if (!string.IsNullOrEmpty(first) && uint.TryParse(first, out var parsedFromEnum))
-                        return parsedFromEnum;
-                    break;
-            }
-
-            // As a last resort, try ToString parse
-            if (uint.TryParse(value.ToString(), out var fallbackParsed))
-            {
-                return fallbackParsed;
-            }
-
-            return null;
-        }
-
-
-        /// <summary>
         /// Windows doesn't support editing metadata of these files by default
         /// </summary>
         private void DetermineMetaDataSupport()
@@ -372,36 +630,201 @@ namespace MediaViewer.Models
 
 
         /// <summary>
-        /// Fetches the value of a specific topic from the file properties.
-        /// </summary>
-        /// <param name="File">Pass in a standard Storage File</param>
-        /// <param name="Topic">Use "nameof() and give the lowercase property"</param>
-        /// <returns></returns>
-        private async Task<object?> FetchTopicValue(StorageFile File, string Topic)
-        {
-            var Property = await File.Properties.RetrievePropertiesAsync(new List<string> { Topic });
-            if (Property.TryGetValue(Topic, out object value) && value != null)
-            {
-                return (object?)value;
-            }
-            else { return null; }
-        }
-
-        /// <summary>
-        /// Saves a value to a specific topic in the file properties.
+        /// Saves a value to a specific topic in the file properties using TagLibSharp.
+        /// For image formats with poor TagLib support, falls back to Windows Storage API.
         /// </summary>
         /// <param name="Path"></param>
         /// <param name="PropertyName"></param>
         /// <param name="Value"></param>
-        private void SaveTopicValue(string Path, string PropertyName, object Value)
+        private async void SaveTopicValue(string Path, string PropertyName, object Value)
         {
-            StorageFile File = StorageFile.GetFileFromPathAsync(Path).AsTask().Result;
+            try
+            {
+                if (!MetaDataEditable || string.IsNullOrEmpty(Path))
+                    return;
 
-            IDictionary<string, object> propertiesToSave = new Dictionary<string, object>();
-            propertiesToSave[GetPropertyTopic(PropertyName)] = Value;
-            File.Properties.SavePropertiesAsync(propertiesToSave).AsTask();
+                // Check if this is an image file with poor TagLib support
+                string ext = System.IO.Path.GetExtension(Path).ToUpperInvariant();
+                bool useFallback = ext == ".PNG" || ext == ".BMP" || ext == ".WEBP";
+
+                // For PNG, BMP, WEBP - use Windows Storage API as they have poor TagLib support
+                if (useFallback && (MediaType == MediaType.Image || MediaType == MediaType.Gif))
+                {
+                    await SaveWithWindowsAPI(Path, PropertyName, Value);
+                    return;
+                }
+
+                using (var tagFile = TagLib.File.Create(Path))
+                {
+                    // For image files, we need to ensure we can write tags
+                    // TagLib might return a read-only or null tag for some image formats
+                    // We need to explicitly get or create the appropriate tag type
+                    TagLib.Tag tag = null;
+                    
+                    if (tagFile is TagLib.Image.File imageFile)
+                    {
+                        // For images, try to get the ImageTag which supports EXIF/XMP/IPTC
+                        tag = imageFile.ImageTag ?? imageFile.GetTag(TagLib.TagTypes.TiffIFD, true)
+                              ?? imageFile.GetTag(TagLib.TagTypes.XMP, true)
+                              ?? imageFile.GetTag(TagLib.TagTypes.IPTCIIM, true);
+                        
+                        // If still null, fall back to the generic Tag property
+                        if (tag == null)
+                            tag = imageFile.Tag;
+                    }
+                    else
+                    {
+                        // For non-image files, use the standard tag
+                        tag = tagFile.Tag;
+                    }
+
+                    if (tag == null)
+                        return; // Can't write to this file type
+
+                    string topic = GetPropertyTopic(PropertyName);
+
+                    switch (topic)
+                    {
+                        case "Title":
+                            tag.Title = Value?.ToString();
+                            break;
+                        case "Description":
+                            tag.Description = Value?.ToString();
+                            break;
+                        case "FirstAlbumArtist":
+                            if (Value != null)
+                            {
+                                tag.AlbumArtists = new[] { Value.ToString() };
+                            }
+                            else
+                            {
+                                tag.AlbumArtists = null;
+                            }
+                            break;
+                        case "Comment":
+                            tag.Comment = Value?.ToString();
+                            break;
+                        case "Rating":
+                            uint? ratingValue = Value as uint?;
+                            WriteRating(tagFile, ratingValue);
+                            break;
+                        case "Album":
+                            tag.Album = Value?.ToString();
+                            break;
+                        case "FirstGenre":
+                            if (Value != null)
+                            {
+                                tag.Genres = new[] { Value.ToString() };
+                            }
+                            else
+                            {
+                                tag.Genres = null;
+                            }
+                            break;
+                        case "Year":
+                            if (Value is uint yearValue)
+                            {
+                                tag.Year = yearValue;
+                            }
+                            else if (Value == null)
+                            {
+                                tag.Year = 0;
+                            }
+                            break;
+                        case "Track":
+                            if (Value is uint trackValue)
+                            {
+                                tag.Track = trackValue;
+                            }
+                            else if (Value == null)
+                            {
+                                tag.Track = 0;
+                            }
+                            break;
+                        case "Lyrics":
+                            tag.Lyrics = Value?.ToString();
+                            break;
+                    }
+
+                    tagFile.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Silently fail or log the error
+                System.Diagnostics.Debug.WriteLine($"Failed to save metadata: {ex.Message}");
+            }
         }
 
+        /// <summary>
+        /// Fallback method to save metadata using Windows Storage API for formats
+        /// that TagLibSharp doesn't support well (PNG, BMP, WEBP).
+        /// </summary>
+        private async System.Threading.Tasks.Task SaveWithWindowsAPI(string path, string propertyName, object value)
+        {
+            try
+            {
+                var file = await StorageFile.GetFileFromPathAsync(path);
+                var properties = await file.Properties.RetrievePropertiesAsync(new string[] { });
+                
+                string topic = GetPropertyTopic(propertyName);
+                
+                IDictionary<string, object> propertiesToSave = new System.Collections.Generic.Dictionary<string, object>();
+                
+                switch (topic)
+                {
+                    case "Title":
+                        propertiesToSave["System.Title"] = value?.ToString() ?? string.Empty;
+                        break;
+                    case "Description":
+                        propertiesToSave["System.Subject"] = value?.ToString() ?? string.Empty;
+                        break;
+                    case "FirstAlbumArtist":
+                        if (value != null)
+                        {
+                            propertiesToSave["System.Author"] = new[] { value.ToString() };
+                        }
+                        break;
+                    case "Comment":
+                        propertiesToSave["System.Comment"] = value?.ToString() ?? string.Empty;
+                        break;
+                    case "Rating":
+                        if (value is uint ratingValue)
+                        {
+                            propertiesToSave["System.Rating"] = ratingValue;
+                        }
+                        else if (value == null)
+                        {
+                            propertiesToSave["System.Rating"] = (uint)0;
+                        }
+                        break;
+                    case "Album":
+                        propertiesToSave["System.Music.AlbumTitle"] = value?.ToString() ?? string.Empty;
+                        break;
+                    case "FirstGenre":
+                        if (value != null)
+                        {
+                            propertiesToSave["System.Music.Genre"] = new[] { value.ToString() };
+                        }
+                        break;
+                    case "Year":
+                        if (value is uint yearValue)
+                        {
+                            propertiesToSave["System.Media.Year"] = yearValue;
+                        }
+                        break;
+                }
+
+                if (propertiesToSave.Count > 0)
+                {
+                    await file.Properties.SavePropertiesAsync(propertiesToSave);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to save metadata with Windows API: {ex.Message}");
+            }
+        }
     }
 
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
