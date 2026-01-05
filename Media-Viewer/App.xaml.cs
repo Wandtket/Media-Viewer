@@ -86,7 +86,7 @@ namespace MediaViewer
 
                 if (Files.GetMediaType(storageFile.Path) == MediaType.Audio)
                 {
-                    App.Current.ActiveWindow.Resize(300, 600);
+                    App.Current.ActiveWindow.Resize(900, 800);
                     App.Current.ActiveWindow.Content = new MiniPage((StorageFile?)storageFile);
                 }
                 else
