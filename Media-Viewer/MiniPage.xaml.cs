@@ -45,7 +45,11 @@ namespace MediaViewer
         private AudioPlaylistItem currentItem;
 
         // Playback
-        private MediaPlayer mediaPlayer;
+        private MediaPlayer Player;
+        private DispatcherTimer ProgressTimer;
+        private bool isScrubbing = false;
+        private bool isLooping = false;
+
         private bool isDraggingSlider = false;
         private Thumb? transportSliderThumb;
 
@@ -74,21 +78,30 @@ namespace MediaViewer
 
             App.Current.ActiveWindow.AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
 
-            mediaPlayer = new MediaPlayer();
-            mediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
-            mediaPlayer.MediaEnded += MediaPlayer_MediaEnded;
-            mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
-            mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
-            mediaPlayer.PlaybackSession.PositionChanged += PlaybackSession_PositionChanged;
+            Player = new MediaPlayer();
+            Player.MediaOpened += Player_MediaOpened;
+            Player.MediaEnded += Player_MediaEnded;
+            Player.MediaFailed += Player_MediaFailed;
+            Player.CurrentStateChanged += Player_CurrentStateChanged;
+
+            // Set up progress timer
+            ProgressTimer = new DispatcherTimer();
+            ProgressTimer.Interval = TimeSpan.FromMilliseconds(100);
+            ProgressTimer.Tick += ProgressTimer_Tick;
+
+            ProgressSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(ProgressSlider_PointerPressed), true);
+            ProgressSlider.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(ProgressSlider_PointerReleased), true);
+
 
             // Set initial volume (will be applied when flyout opens)
-            mediaPlayer.Volume = 1.0;
+            Player.Volume = 1.0;
 
             if (File != null)
             {
                 await LoadAudioFile(File);
             }
         }
+
 
 
         #region File Loading
@@ -194,8 +207,8 @@ namespace MediaViewer
                 }
 
                 // Load media
-                mediaPlayer.Source = Windows.Media.Core.MediaSource.CreateFromStorageFile(item.File);
-                mediaPlayer.Play();
+                Player.Source = Windows.Media.Core.MediaSource.CreateFromStorageFile(item.File);
+                Player.Play();
 
                 // Update properties UI
                 currentMediaProperties = item.Properties;
@@ -214,40 +227,40 @@ namespace MediaViewer
             }
         }
 
-        private void MediaPlayer_MediaOpened(MediaPlayer sender, object args)
+        private void Player_MediaOpened(MediaPlayer sender, object args)
         {
             DispatcherQueue.TryEnqueue(() =>
             {
-                var duration = sender.PlaybackSession.NaturalDuration;
-                TransportProgressSlider.Maximum = duration.TotalSeconds;
-                TotalTimeTextTransport.Text = FormatTime(duration);
-
-                if (currentItem != null)
+                if (Player.NaturalDuration.TotalSeconds > 0)
                 {
-                    currentItem.DisplayDuration = FormatTime(duration);
-                }
-
-                AlbumPlaceholder.Visibility = Visibility.Collapsed;
-            });
-        }
-
-        private void MediaPlayer_MediaEnded(MediaPlayer sender, object args)
-        {
-            DispatcherQueue.TryEnqueue(async () =>
-            {
-                if (Settings.Current.RepeatMode == RepeatMode.RepeatOne)
-                {
-                    sender.PlaybackSession.Position = TimeSpan.Zero;
-                    sender.Play();
+                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(Player.NaturalDuration.TotalSeconds));
+                    ProgressSlider.Maximum = Player.NaturalDuration.TotalSeconds;
                 }
                 else
                 {
-                    await PlayNext();
+                    TotalTimeText.Text = "--:--";
+                    ProgressSlider.Maximum = 100;
                 }
             });
         }
 
-        private void MediaPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
+        private void Player_MediaEnded(MediaPlayer sender, object args)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (isLooping)
+                {
+                    Player.Play();
+                }
+                else
+                {
+                    UpdatePlayPauseButton(false);
+                    ProgressTimer.Stop();
+                }
+            });
+        }
+
+        private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
@@ -255,27 +268,114 @@ namespace MediaViewer
             });
         }
 
-        private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
+        private void Player_CurrentStateChanged(MediaPlayer sender, object args)
         {
             DispatcherQueue.TryEnqueue(() =>
             {
-                UpdatePlayPauseButton(sender.PlaybackState == MediaPlaybackState.Playing);
-            });
-        }
+                UpdatePlayPauseButton(sender.CurrentState == MediaPlayerState.Playing);
 
-        private void PlaybackSession_PositionChanged(MediaPlaybackSession sender, object args)
-        {
-            if (isDraggingSlider) return;
-
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (!isDraggingSlider)
+                if (sender.CurrentState == MediaPlayerState.Playing)
                 {
-                    TransportProgressSlider.Value = sender.Position.TotalSeconds;
-                    CurrentTimeTextTransport.Text = FormatTime(sender.Position);
+                    ProgressTimer.Start();
+                }
+                else if (sender.CurrentState == MediaPlayerState.Paused)
+                {
+                    ProgressTimer.Stop();
                 }
             });
         }
+
+        private void ProgressTimer_Tick(object sender, object e)
+        {
+            if (!isScrubbing && Player.PlaybackSession != null)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    var currentPosition = Player.PlaybackSession.Position;
+                    CurrentTimeText.Text = FormatTime(currentPosition);
+
+                    if (Player.NaturalDuration.TotalSeconds > 0)
+                    {
+                        ProgressSlider.Value = currentPosition.TotalSeconds;
+                    }
+                });
+            }
+        }
+
+        private void ProgressSlider_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            // Enter scrubbing mode
+            isScrubbing = true;
+
+            // Immediately seek to the clicked position (so single clicks jump)
+            SeekToPositionFromPointer(e);
+        }
+
+        private void ProgressSlider_PointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            // On release we ensure final position is applied and exit scrubbing mode
+            SeekToPositionFromPointer(e);
+            isScrubbing = false;
+        }
+
+        /// <summary>
+        /// Calculate slider value from pointer position and apply it to both the slider and media playback session.
+        /// This ensures single-clicking the track jumps immediately.
+        /// </summary>
+        /// <param name="e">Pointer event args from the slider</param>
+        private void SeekToPositionFromPointer(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (Player == null || Player.Source == null || Player.PlaybackSession == null)
+                return;
+
+            // Walk up the visual tree from OriginalSource to find the Slider instance that owns the event.          
+            DependencyObject source = e.OriginalSource as DependencyObject;
+            Microsoft.UI.Xaml.Controls.Slider slider = null;
+            while (source != null)
+            {
+                if (ReferenceEquals(source, ProgressSlider))
+                {
+                    slider = ProgressSlider;
+                    break;
+                }
+                if (source is Microsoft.UI.Xaml.Controls.Slider s)
+                {
+                    slider = s;
+                    break;
+                }
+                source = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(source);
+            }
+
+            // Fallback: if we couldn't find one in the tree, use the known ProgressSlider instance.
+            slider ??= ProgressSlider;
+
+            // Get pointer position relative to the slider
+            var p = e.GetCurrentPoint(slider);
+            double x = p.Position.X;
+
+            double width = slider.ActualWidth;
+            if (width <= 0) width = slider.ActualSize.X;
+
+            // Guard against division by zero
+            if (width <= 0) return;
+
+            // Compute ratio and target value
+            double ratio = x / width;
+            ratio = Math.Clamp(ratio, 0.0, 1.0);
+
+            double newValue = ratio * slider.Maximum;
+
+            // Apply to slider and media
+            slider.Value = newValue;
+
+            var newPosition = TimeSpan.FromSeconds(newValue);
+            Player.PlaybackSession.Position = newPosition;
+            CurrentTimeText.Text = FormatTime(newPosition);
+        }
+
+
+
+
 
         private void UpdatePlayPauseButton(bool isPlaying)
         {
@@ -292,13 +392,13 @@ namespace MediaViewer
 
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
-            if (mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+            if (Player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
             {
-                mediaPlayer.Pause();
+                Player.Pause();
             }
             else
             {
-                mediaPlayer.Play();
+                Player.Play();
             }
         }
 
@@ -329,8 +429,8 @@ namespace MediaViewer
                     }
                     else
                     {
-                        mediaPlayer.Pause();
-                        mediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                        Player.Pause();
+                        Player.PlaybackSession.Position = TimeSpan.Zero;
                         return;
                     }
                 }
@@ -346,8 +446,8 @@ namespace MediaViewer
 
                 if (nextIndex == 0 && Settings.Current.RepeatMode != RepeatMode.RepeatAll)
                 {
-                    mediaPlayer.Pause();
-                    mediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                    Player.Pause();
+                    Player.PlaybackSession.Position = TimeSpan.Zero;
                     return;
                 }
 
@@ -360,9 +460,9 @@ namespace MediaViewer
             if (currentItem == null || playlist.Count == 0) return;
 
             // If more than 3 seconds into the song, restart it
-            if (mediaPlayer.PlaybackSession.Position.TotalSeconds > 3)
+            if (Player.PlaybackSession.Position.TotalSeconds > 3)
             {
-                mediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                Player.PlaybackSession.Position = TimeSpan.Zero;
                 return;
             }
 
@@ -395,9 +495,9 @@ namespace MediaViewer
             if (currentItem == null || playlist.Count == 0) return;
 
             // If more than 3 seconds into the song, restart it
-            if (mediaPlayer.PlaybackSession.Position.TotalSeconds > 3)
+            if (Player.PlaybackSession.Position.TotalSeconds > 3)
             {
-                mediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                Player.PlaybackSession.Position = TimeSpan.Zero;
                 return;
             }
 
@@ -487,106 +587,8 @@ namespace MediaViewer
             currentShuffleIndex = 0;
         }
 
-        private void TransportProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // Don't update position during dragging or automatic updates from playback
-            // Position will be set when pointer is released
-        }
-
-        private void TransportProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            isDraggingSlider = true;
-            transportSliderThumb = sender as Thumb;
-            // Optionally pause during scrubbing for better UX
-            mediaPlayer.Pause();
-        }
-
-        private void TransportProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (mediaPlayer.PlaybackSession != null)
-            {
-                mediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(TransportProgressSlider.Value);
-            }
-
-            isDraggingSlider = false;
-            transportSliderThumb = null;
-            // Resume playback if it was paused
-            if (mediaPlayer?.PlaybackSession?.PlaybackState == MediaPlaybackState.Paused)
-                 mediaPlayer.Play();
-        }
-
-        private void TransportProgressSlider_PointerCancelOrLost(object sender, PointerRoutedEventArgs e)
-        {
-            isDraggingSlider = false;
-        }
-
-        private void TransportProgressSlider_Loaded(object sender, RoutedEventArgs e)
-        {
-            AttachTransportSliderThumb();
-        }
-
-        private void AttachTransportSliderThumb()
-        {
-            if (TransportProgressSlider == null || TransportProgressSlider.Template == null)
-            {
-                return;
-            }
-
-            if (transportSliderThumb != null)
-            {
-                transportSliderThumb.DragStarted -= TransportSliderThumb_DragStarted;
-                transportSliderThumb.DragCompleted -= TransportSliderThumb_DragCompleted;
-            }
-
-            transportSliderThumb = FindSliderThumb(TransportProgressSlider);
-
-            if (transportSliderThumb != null)
-            {
-                transportSliderThumb.DragStarted += TransportSliderThumb_DragStarted;
-                transportSliderThumb.DragCompleted += TransportSliderThumb_DragCompleted;
-            }
-        }
-
-        private Thumb? FindSliderThumb(DependencyObject parent)
-        {
-            if (parent == null)
-            {
-                return null;
-            }
-
-            int childCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childCount; i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is Thumb thumb)
-                {
-                    return thumb;
-                }
-
-                var descendant = FindSliderThumb(child);
-                if (descendant != null)
-                {
-                    return descendant;
-                }
-            }
-
-            return null;
-        }
-
-        private void TransportSliderThumb_DragStarted(object sender, DragStartedEventArgs e)
-        {
-            isDraggingSlider = true;
-        }
-
-        private void TransportSliderThumb_DragCompleted(object sender, DragCompletedEventArgs e)
-        {
-            if (mediaPlayer?.PlaybackSession != null)
-            {
-                mediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(TransportProgressSlider.Value);
-            }
-            isDraggingSlider = false;
-        }
-
+       
+     
         private string FormatTime(TimeSpan time)
         {
             if (time.TotalHours >= 1)
@@ -612,22 +614,22 @@ namespace MediaViewer
                 
                 if (slider != null)
                 {
-                    slider.Value = mediaPlayer.Volume * 100;
+                    slider.Value = Player.Volume * 100;
                 }
                 
                 if (percentText != null)
                 {
-                    percentText.Text = $"{(int)(mediaPlayer.Volume * 100)}%";
+                    percentText.Text = $"{(int)(Player.Volume * 100)}%";
                 }
             }
         }
 
         private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (mediaPlayer == null) return;
+            if (Player == null) return;
 
             double volume = e.NewValue / 100.0;
-            mediaPlayer.Volume = volume;
+            Player.Volume = volume;
             
             // Update volume percentage text by finding it in the flyout
             if (sender is Slider slider && slider.Parent is Grid grid && grid.Parent is StackPanel panel)
@@ -652,7 +654,7 @@ namespace MediaViewer
 
         private void MuteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (mediaPlayer == null) return;
+            if (Player == null) return;
 
             // Find the slider in the flyout
             if (sender is Button button && button.Parent is StackPanel panel)
@@ -662,7 +664,7 @@ namespace MediaViewer
                 if (isMuted)
                 {
                     // Unmute
-                    mediaPlayer.Volume = lastVolume;
+                    Player.Volume = lastVolume;
                     if (slider != null)
                     {
                         slider.Value = lastVolume * 100;
@@ -672,8 +674,8 @@ namespace MediaViewer
                 else
                 {
                     // Mute
-                    lastVolume = mediaPlayer.Volume;
-                    mediaPlayer.Volume = 0;
+                    lastVolume = Player.Volume;
+                    Player.Volume = 0;
                     if (slider != null)
                     {
                         slider.Value = 0;
