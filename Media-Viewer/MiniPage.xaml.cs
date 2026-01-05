@@ -81,7 +81,6 @@ namespace MediaViewer
             Player = new MediaPlayer();
             Player.MediaOpened += Player_MediaOpened;
             Player.MediaEnded += Player_MediaEnded;
-            Player.MediaFailed += Player_MediaFailed;
             Player.CurrentStateChanged += Player_CurrentStateChanged;
 
             // Set up progress timer
@@ -260,13 +259,6 @@ namespace MediaViewer
             });
         }
 
-        private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
-        {
-            DispatcherQueue.TryEnqueue(async () =>
-            {
-                await ErrorBox.Show(new Exception(args.ErrorMessage), Title: "Media Failed");
-            });
-        }
 
         private void Player_CurrentStateChanged(MediaPlayer sender, object args)
         {
@@ -379,10 +371,13 @@ namespace MediaViewer
 
         private void UpdatePlayPauseButton(bool isPlaying)
         {
-            var icon = PlayPauseButtonTransport.Content as FontIcon;
-            if (icon != null)
+            if (isPlaying)
             {
-                icon.Glyph = isPlaying ? "\uE769" : "\uE768"; // Pause : Play
+                ((FontIcon)PlayPauseButton.Content).Glyph = "\uE769"; // Pause icon
+            }
+            else
+            {
+                ((FontIcon)PlayPauseButton.Content).Glyph = "\uE768"; // Play icon
             }
         }
 

@@ -647,7 +647,7 @@
                                             FontSize="20"/>
                             </Button>
 
-                            <Button x:Name="PlayPauseButtonTransport" 
+                            <Button x:Name="PlayPauseButton" 
                                     Click="PlayPauseButton_Click"
                                     Width="56" 
                                     Height="56">
