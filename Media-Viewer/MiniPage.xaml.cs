@@ -1,3 +1,10 @@
+using MediaViewer.Controls.Dialogs;
+using MediaViewer.Enums;
+using MediaViewer.Extensions;
+using MediaViewer.Models;
+using MediaViewer.Pages;
+using Microsoft.UI;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -9,6 +16,7 @@ using Microsoft.UI.Xaml.Navigation;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -19,20 +27,14 @@ using Windows.Media.Playback;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.Storage.Pickers;
+using Windows.Storage.Search;
 using Windows.Storage.Streams;
-using MediaViewer.Models;
-using MediaViewer.Enums;
-using MediaViewer.Extensions;
-using MediaViewer.Controls.Dialogs;
-using MediaViewer.Pages;
-using System.Diagnostics;
-using Microsoft.UI;
-using Microsoft.UI.Text;
 
 namespace MediaViewer
 {
     public sealed partial class MiniPage : Page
     {
+
         private bool isNarrowView = false;
         private bool isTransportNarrow = false;
         private MediaProperties currentMediaProperties;
@@ -56,44 +58,13 @@ namespace MediaViewer
         private double lastVolume = 1.0;
         private bool isMuted = false;
 
-        // Album artwork
-        private const string DRAG_DROP_FORMAT = "FileDrop";
 
         public MiniPage(StorageFile? File = null)
         {
             InitializeComponent();
-            InitializeMediaPlayer();
             Initialize(File);
         }
 
-        private void InitializeMediaPlayer()
-        {
-            mediaPlayer = new MediaPlayer();
-            mediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
-            mediaPlayer.MediaEnded += MediaPlayer_MediaEnded;
-            mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
-            mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
-            mediaPlayer.PlaybackSession.PositionChanged += PlaybackSession_PositionChanged;
-
-            // Wire up transport controls
-            PlayPauseButtonTransport.Click += PlayPauseButton_Click;
-            NextButton.Click += NextButton_Click;
-            PrevButton.Click += PrevButton_Click;
-            RepeatButton.Click += RepeatButton_Click;
-            ShuffleButton.Click += ShuffleButton_Click;
-            TransportProgressSlider.ValueChanged += TransportProgressSlider_ValueChanged;
-            TransportProgressSlider.PointerPressed += TransportProgressSlider_PointerPressed;
-            TransportProgressSlider.PointerReleased += TransportProgressSlider_PointerReleased;
-            TransportProgressSlider.PointerCanceled += TransportProgressSlider_PointerCancelOrLost;
-            TransportProgressSlider.PointerCaptureLost += TransportProgressSlider_PointerCancelOrLost;
-            TransportProgressSlider.Loaded += TransportProgressSlider_Loaded;
-
-            // Set initial volume (will be applied when flyout opens)
-            mediaPlayer.Volume = 1.0;
-            
-            // Wire up volume button flyout
-            VolumeButton.Flyout.Opening += VolumeFlyout_Opening;
-        }
 
         private async void Initialize(StorageFile? File = null)
         {
@@ -103,17 +74,22 @@ namespace MediaViewer
 
             App.Current.ActiveWindow.AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
 
-            // Enable drag and drop for album artwork
-            AlbumArtwork.AllowDrop = true;
-            AlbumArtwork.DragOver += AlbumArtwork_DragOver;
-            AlbumArtwork.Drop += AlbumArtwork_Drop;
-            AlbumArtwork.Tapped += AlbumArtwork_Tapped;
+            mediaPlayer = new MediaPlayer();
+            mediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
+            mediaPlayer.MediaEnded += MediaPlayer_MediaEnded;
+            mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
+            mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
+            mediaPlayer.PlaybackSession.PositionChanged += PlaybackSession_PositionChanged;
+
+            // Set initial volume (will be applied when flyout opens)
+            mediaPlayer.Volume = 1.0;
 
             if (File != null)
             {
                 await LoadAudioFile(File);
             }
         }
+
 
         #region File Loading
 
@@ -132,7 +108,7 @@ namespace MediaViewer
                 var audioFiles = files.Where(f => Files.GetMediaType(f.Path) == MediaType.Audio).ToList();
 
                 // Apply sorting
-                audioFiles = ApplySorting(audioFiles, sortEntry);
+                audioFiles = ApplySorting(audioFiles);
 
                 // Build playlist
                 playlist.Clear();
@@ -162,8 +138,10 @@ namespace MediaViewer
             }
         }
 
-        private List<StorageFile> ApplySorting(List<StorageFile> files, SortEntry? sortEntry)
+        private List<StorageFile> ApplySorting(List<StorageFile> files)
         {
+            var sortEntry = App.Current.LastSortEntry;
+
             if (sortEntry == null)
             {
                 return files.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase.WithNaturalSort()).ToList();
@@ -188,6 +166,7 @@ namespace MediaViewer
         }
 
         #endregion
+
 
         #region Playback
 
@@ -519,7 +498,7 @@ namespace MediaViewer
             isDraggingSlider = true;
             transportSliderThumb = sender as Thumb;
             // Optionally pause during scrubbing for better UX
-            // mediaPlayer.Pause();
+            mediaPlayer.Pause();
         }
 
         private void TransportProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
@@ -528,11 +507,12 @@ namespace MediaViewer
             {
                 mediaPlayer.PlaybackSession.Position = TimeSpan.FromSeconds(TransportProgressSlider.Value);
             }
+
             isDraggingSlider = false;
             transportSliderThumb = null;
             // Resume playback if it was paused
-            // if (mediaPlayer.PlaybackSession.PlaybackState == MediaPlaybackState.Paused)
-            //     mediaPlayer.Play();
+            if (mediaPlayer?.PlaybackSession?.PlaybackState == MediaPlaybackState.Paused)
+                 mediaPlayer.Play();
         }
 
         private void TransportProgressSlider_PointerCancelOrLost(object sender, PointerRoutedEventArgs e)

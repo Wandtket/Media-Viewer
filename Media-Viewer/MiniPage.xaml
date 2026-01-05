@@ -183,7 +183,11 @@
                     <Viewbox Stretch="Uniform">
                         <Grid Width="520" Height="420">
                             <Image x:Name="AlbumArtwork" 
-                                   Stretch="UniformToFill" />
+                                   Stretch="UniformToFill"
+                                   AllowDrop="True"
+                                   DragOver="AlbumArtwork_DragOver"
+                                   Drop="AlbumArtwork_Drop"
+                                   Tapped="AlbumArtwork_Tapped"/>
 
                             <Border x:Name="AlbumPlaceholder"
                                 Background="#FFF" 
@@ -613,6 +617,12 @@
                                             FontSize="12" />
 
                                 <Slider x:Name="TransportProgressSlider" 
+                                        Loaded="TransportProgressSlider_Loaded"
+                                        ValueChanged="TransportProgressSlider_ValueChanged"
+                                        PointerPressed="TransportProgressSlider_PointerPressed"
+                                        PointerReleased="TransportProgressSlider_PointerReleased"
+                                        PointerCanceled="TransportProgressSlider_PointerCancelOrLost"
+                                        PointerCaptureLost="TransportProgressSlider_PointerCancelOrLost"                                       
                                         Grid.Column="1" 
                                         Minimum="0"
                                         Maximum="100" 
@@ -636,6 +646,7 @@
                                     Spacing="12">
 
                             <Button x:Name="PrevButton" 
+                                    Click="PrevButton_Click"
                                     Width="48" 
                                     Height="48">
                                 <FontIcon Glyph="&#xE100;" 
@@ -643,12 +654,14 @@
                             </Button>
 
                             <Button x:Name="PlayPauseButtonTransport" 
+                                    Click="PlayPauseButton_Click"
                                     Width="56" 
                                     Height="56">
                                 <FontIcon Glyph="&#xE768;" FontSize="24" />
                             </Button>
 
                             <Button x:Name="NextButton" 
+                                    Click="NextButton_Click"
                                     Width="48" 
                                     Height="48">
 
@@ -665,18 +678,20 @@
                                     HorizontalAlignment="Right" 
                                     Spacing="12">
 
-                            <Button x:Name="RepeatButton">
+                            <Button x:Name="RepeatButton"
+                                    Click="RepeatButton_Click">
                                 <FontIcon Glyph="&#xE8EE;"/>
                             </Button>
 
-                            <Button x:Name="ShuffleButton">
+                            <Button x:Name="ShuffleButton"
+                                    Click="ShuffleButton_Click">
                                 <FontIcon Glyph="&#xE8B1;" />
                             </Button>
 
                             <Button x:Name="VolumeButton">
                                 <FontIcon Glyph="&#xE993;" />
                                 <Button.Flyout>
-                                    <Flyout Placement="Top">
+                                    <Flyout Opening="VolumeFlyout_Opening" Placement="Top">
                                         <StackPanel Width="200" Spacing="10">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
