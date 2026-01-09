@@ -503,6 +503,12 @@ namespace MediaViewer.Pages
         }
         private string repeatMode = "repeatMode";
 
+        public double RepeatDelaySeconds
+        {
+            get { return localSettings.Values[repeatDelaySeconds] as double? ?? 0.0; }
+            set { localSettings.Values[repeatDelaySeconds] = value; OnPropertyChanged("RepeatDelaySeconds"); }
+        }
+        private string repeatDelaySeconds = "repeatDelaySeconds";
 
         public bool AutoPlayVideos
         {
@@ -617,7 +623,7 @@ namespace MediaViewer.Pages
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged(string Name)
         {
-            PropertyChanged(this, new PropertyChangedEventArgs(Name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(Name));
         }
 
     }
