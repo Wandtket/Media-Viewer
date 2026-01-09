@@ -21,6 +21,9 @@ namespace MediaViewer.Models
         private bool isSelected;
 
         [ObservableProperty]
+        private bool isCurrentTrack; // New property to track if this is the loaded track
+
+        [ObservableProperty]
         private int trackNumber;
 
         [ObservableProperty]
@@ -42,21 +45,29 @@ namespace MediaViewer.Models
 
         private void UpdateDisplayInfo()
         {
-            displayTitle = !string.IsNullOrEmpty(properties?.Title) 
-                ? properties.Title 
+            DisplayTitle = !string.IsNullOrEmpty(properties?.Title)
+                ? properties.Title
                 : file.DisplayName;
 
-            displayArtist = !string.IsNullOrEmpty(properties?.Author) 
-                ? properties.Author 
+            DisplayArtist = !string.IsNullOrEmpty(properties?.Author)
+                ? properties.Author
                 : "Unknown";
 
             // Duration will be set when audio is loaded
-            displayDuration = "00:00";
+            DisplayDuration = displayDuration ?? "00:00";
         }
 
         public void RefreshDisplay()
         {
-            UpdateDisplayInfo();
+            // Use the property setters (uppercase) instead of field assignments
+            // This ensures PropertyChanged notifications are raised
+            DisplayTitle = !string.IsNullOrEmpty(properties?.Title)
+                ? properties.Title
+                : file.DisplayName;
+
+            DisplayArtist = !string.IsNullOrEmpty(properties?.Author)
+                ? properties.Author
+                : "Unknown";
         }
     }
 }
