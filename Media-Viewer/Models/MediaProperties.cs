@@ -15,6 +15,7 @@ namespace MediaViewer.Models
 
     public partial class MediaProperties : ObservableObject
     {
+        private bool _suppressAutoSave = false;
 
         public MediaProperties()
         {
@@ -23,8 +24,12 @@ namespace MediaViewer.Models
 
         public MediaProperties(StorageFile file)
         {
+            // Suppress auto-save during initial load
+            _suppressAutoSave = true;
             GetProperties(file);
+            _suppressAutoSave = false;
         }
+
 
 
         [ObservableProperty]
@@ -46,64 +51,126 @@ namespace MediaViewer.Models
         private bool metaDataEditable;
 
 
+
+
         [ObservableProperty]
         [PropertyTopic("Title")]
         private string? title;
-        partial void OnTitleChanged(string? value) { SaveTopicValue(Path, nameof(title), value); }
+        partial void OnTitleChanged(string? value) 
+        {
+            if (!string.Equals(title, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(title), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Description")]
         private string? subject;
-        partial void OnSubjectChanged(string? value) { SaveTopicValue(Path, nameof(subject), value); }
+        partial void OnSubjectChanged(string? value) 
+        {
+            if (!string.Equals(subject, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(subject), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("FirstAlbumArtist")]
         private string? author;
-        partial void OnAuthorChanged(string? value) { SaveTopicValue(Path, nameof(author), value); }
+        partial void OnAuthorChanged(string? value) 
+        {
+            if (!string.Equals(author, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(author), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Comment")]
         private string? comments;
-        partial void OnCommentsChanged(string? value) { SaveTopicValue(Path, nameof(comments), value); }
+        partial void OnCommentsChanged(string? value) 
+        {
+            if (!string.Equals(comments, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(comments), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Rating")]
         private UInt32? rating;
-        partial void OnRatingChanged(UInt32? value) { SaveTopicValue(Path, nameof(rating), value); }
+        partial void OnRatingChanged(UInt32? value) 
+        {
+            if (!UInt32.Equals(rating, value))
+            {
+                SaveTopicValue(Path, nameof(rating), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Album")]
         private string? album;
-        partial void OnAlbumChanged(string? value) { SaveTopicValue(Path, nameof(album), value); }
+        partial void OnAlbumChanged(string? value) 
+        {
+            if (!string.Equals(album, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(album), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("FirstGenre")]
         private string? genre;
-        partial void OnGenreChanged(string? value) { SaveTopicValue(Path, nameof(genre), value); }
+        partial void OnGenreChanged(string? value) 
+        {
+            if (!string.Equals(genre, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(genre), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Year")]
         private UInt32? year;
-        partial void OnYearChanged(UInt32? value) { SaveTopicValue(Path, nameof(year), value); }
+        partial void OnYearChanged(UInt32? value) 
+        {
+            if (!UInt32.Equals(year, value))
+            {
+                SaveTopicValue(Path, nameof(year), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Track")]
         private UInt32? track;
-        partial void OnTrackChanged(UInt32? value) { SaveTopicValue(Path, nameof(track), value); }
+        partial void OnTrackChanged(UInt32? value) 
+        {
+            if (!UInt32.Equals(track, value))
+            {
+                SaveTopicValue(Path, nameof(track), value);
+            }
+        }
 
 
         [ObservableProperty]
         [PropertyTopic("Lyrics")]
         private string? lyrics;
-        partial void OnLyricsChanged(string? value) { SaveTopicValue(Path, nameof(lyrics), value); }
+        partial void OnLyricsChanged(string? value) 
+        {
+            if (!string.Equals(lyrics, value, StringComparison.Ordinal))
+            {
+                SaveTopicValue(Path, nameof(lyrics), value);
+            }
+        }
 
 
         [ObservableProperty]
