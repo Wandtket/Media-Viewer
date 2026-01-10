@@ -22,6 +22,7 @@ using Windows.Foundation;
 using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
 using Windows.Media.Core;
+using Windows.Media.Playback;
 using Windows.Security.Authorization.AppCapabilityAccess;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -59,6 +60,8 @@ public sealed partial class VisualPlayer : UserControl
     public bool isHDR = false;
 
     public bool isFreeMove = false;
+    private bool _isSeamlessLooping = false;
+    private bool _initialMediaOpened = false;
 
 
     public VisualPlayer()
@@ -161,9 +164,49 @@ public sealed partial class VisualPlayer : UserControl
         VideoElement.Visibility = Visibility.Visible;
 
         Windows.Media.Playback.MediaPlayer player = new Windows.Media.Playback.MediaPlayer();
-        player.IsLoopingEnabled = (Settings.Current.RepeatMode == RepeatMode.RepeatOne);
+        
+        // For network drives and large files: Disable RealTimePlayback to allow more buffering
+        // This prevents stuttering when loading from network locations
         player.RealTimePlayback = false;
-        player.SetUriSource(new Uri(source.Path));
+        
+        // Enable audio/video frame server mode for better performance with high-bitrate content
+        // This reduces latency and improves responsiveness
+        player.AudioCategory = Windows.Media.Playback.MediaPlayerAudioCategory.Movie;
+        player.AudioDeviceType = Windows.Media.Playback.MediaPlayerAudioDeviceType.Multimedia;
+        
+        // For seamless looping (especially for short videos), use MediaPlaybackList
+        // This enables gapless playback and eliminates stuttering at loop points
+        if (Settings.Current.RepeatMode == RepeatMode.RepeatOne)
+        {
+            _isSeamlessLooping = true;
+            
+            // Create MediaSource from file
+            var mediaSource = MediaSource.CreateFromStorageFile(source);
+            
+            // Create MediaPlaybackItem
+            var playbackItem = new MediaPlaybackItem(mediaSource);
+            
+            // Create MediaPlaybackList for seamless looping
+            var playbackList = new MediaPlaybackList();
+            
+            // Enable gapless playback - this is key for seamless loops
+            playbackList.AutoRepeatEnabled = true;
+            playbackList.MaxPrefetchTime = TimeSpan.FromSeconds(5); // Pre-buffer up to 5 seconds
+            
+            // Add the same item to the list
+            playbackList.Items.Add(playbackItem);
+            
+            // Set the source to the playback list
+            player.Source = playbackList;
+        }
+        else
+        {
+            _isSeamlessLooping = false;
+            
+            // For non-looping playback, use regular MediaSource
+            player.IsLoopingEnabled = false;
+            player.SetUriSource(new Uri(source.Path));
+        }
 
         VideoElement.SetMediaPlayer(player);
         VideoElement.AreTransportControlsEnabled = true;
@@ -323,6 +366,17 @@ public sealed partial class VisualPlayer : UserControl
                 presenter.Height = this.ActualHeight;
                 LoadRing.IsActive = false;
             }
+
+            // For seamless looping, prevent transport controls from showing on loop restarts
+            // Only allow restore on the first MediaOpened event
+            if (_isSeamlessLooping && _initialMediaOpened)
+            {
+                // This is a loop restart - don't restore state or show controls
+                // The transport controls auto-hide timer should continue
+                return;
+            }
+
+            _initialMediaOpened = true;
 
             var savedState = LoadPlaybackState(CurrentFile);
 
@@ -576,47 +630,78 @@ public sealed partial class VisualPlayer : UserControl
         Flyout.Items.Add(OpenWithItem);
 
         //Save As Item
-        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save As", Icon = new SymbolIcon(Symbol.SaveLocal) };
+        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Frame As", Icon = new SymbolIcon(Symbol.SaveLocal) };
         SaveAsItem.Click += async (_, __) => await SaveFrameToFile();
         Flyout.Items.Add(SaveAsItem);
 
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
+        //Edit 
+        MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
 
-        //Edit & Upscaler
-        if (!string.IsNullOrEmpty(Settings.Current.ImageUpscalerPath))
+        //Edit Video
+        IconElement? editvideoicon = Files.GetAppDisplayName(Settings.Current.VideoEditorPath) != null
+             ? await Files.GetAppIconAsync(Settings.Current.VideoEditorPath)
+             : new SymbolIcon(Symbol.Edit);
+        MenuFlyoutItem EditVideoItem = new MenuFlyoutItem { Text = $"Edit Video", Icon = editvideoicon };
+        EditVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Editor);
+        EditItem.Items.Add(EditVideoItem);
+
+        //Edit Frame
+        IconElement? editframeicon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
+             ? await Files.GetAppIconAsync(Settings.Current.ImageEditorPath)
+             : new SymbolIcon(Symbol.Edit);
+        MenuFlyoutItem EditFrameItem = new MenuFlyoutItem { Text = $"Edit Frame", Icon = editframeicon };
+        EditFrameItem.Click += async (_, __) => await EditCurrentFrame();
+        EditItem.Items.Add(EditFrameItem);
+
+        //Separator
+        EditItem.Items.Add(new MenuFlyoutSeparator());
+
+        //Converter to Gif
+        MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
+        EditItem.Items.Add(ConvertToGifItem);
+
+        EditItem.Items.Add(new MenuFlyoutSeparator());
+
+        //Video Converter
+
+        if (File.Exists(Settings.))
         {
-            MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
-
-            IconElement? icon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
-                ? await Files.GetAppIconAsync(Settings.Current.ImageEditorPath)
-                : new SymbolIcon(Symbol.Edit);
-            MenuFlyoutItem EditImageItem = new MenuFlyoutItem { Text = $"Edit Image", Icon = icon };
-            EditImageItem.Click += async (_, __) => await EditCurrentFrame();
-            EditItem.Items.Add(EditImageItem);
-
-            MenuFlyoutItem UpscaleImageItem = new MenuFlyoutItem { Text = $"Upscale Image", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
-            UpscaleImageItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
-            EditItem.Items.Add(UpscaleImageItem);
-
-            Flyout.Items.Add(EditItem);
+            MenuFlyoutItem ConvertVideoItem = new MenuFlyoutItem { Text = $"Convert Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath) };
+            ConvertVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Converter); ;
+            EditItem.Items.Add(ConvertVideoItem);
+            EditItem.Items.Add(new MenuFlyoutSeparator());
         }
-        else
+
+        //Video Upscaler
+        if (File.Exists(Settings.Current.VideoUpscalerPath))
         {
-            MenuFlyoutItem EditItem = new MenuFlyoutItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
-            EditItem.Click += async (_, __) => await EditCurrentFrame();
-            Flyout.Items.Add(EditItem);
+            MenuFlyoutItem UpscaleVideoItem = new MenuFlyoutItem { Text = $"Upscale Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoUpscalerPath) };
+            UpscaleVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
+            EditItem.Items.Add(UpscaleVideoItem);
         }
+         
+        //Image Upscaler
+        if (File.Exists(Settings.Current.ImageUpscalerPath))
+        {
+            MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Frame", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
+            UpscaleFrameItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
+            EditItem.Items.Add(UpscaleFrameItem);
+        }
+
+        Flyout.Items.Add(EditItem);
 
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-        //Copy Items
-        MenuFlyoutItem CopyItem = new MenuFlyoutItem { Text = $"Copy", Icon = new SymbolIcon(Symbol.Copy) };
-        CopyItem.Click += async (_, __) => { CurrentFile.CopyFileToClipboardAsync(); ShowClipboardFeedback(); };
-        Flyout.Items.Add(CopyItem);
+        //Copy Frame Item
+        MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Frame", Icon = new SymbolIcon(Symbol.Copy) };
+        CopyFrameItem.Click += async (_, __) => CopyFrameToClipboard();
+        Flyout.Items.Add(CopyFrameItem);
 
+        //Copy as Path Item
         MenuFlyoutItem CopyAsPathItem = new MenuFlyoutItem { Text = $"Copy as Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
         CopyAsPathItem.Click += async (_, __) => { CurrentFile.CopyFilePathToClipboard(); };
         Flyout.Items.Add(CopyAsPathItem);
@@ -624,27 +709,13 @@ public sealed partial class VisualPlayer : UserControl
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
+        //Show in File Explorer Item
         MenuFlyoutItem OpenFileExplorerItem = new MenuFlyoutItem { Text = $"Show in File Explorer", Icon = new SymbolIcon(Symbol.OpenFile) };
         OpenFileExplorerItem.Click += async (_, __) => await CurrentFile.ShowInFileExplorerAsync();
         Flyout.Items.Add(OpenFileExplorerItem);
 
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
-
-
-        if (Files.GetMediaType(CurrentFile.Path) == MediaType.Image) 
-        {
-            //Set As Item
-            MenuFlyoutSubItem SetAsItem = new MenuFlyoutSubItem { Text = $"Set As", Icon = new FontIcon() { Glyph = "\uE9D9" } };
-            MenuFlyoutItem LockscreenItem = new MenuFlyoutItem { Text = $"Lock screen", Icon = new FontIcon() { Glyph = "\uEE3F" } };
-            LockscreenItem.Click += async (_, __) => CurrentFile.SetAsLockScreenAsync();
-            SetAsItem.Items.Add(LockscreenItem);
-
-            MenuFlyoutItem BackgroundItem = new MenuFlyoutItem { Text = $"Background", Icon = new FontIcon() { Glyph = "\uE771" } };
-            BackgroundItem.Click += async (_, __) => MediaExtensions.SetAsDesktopBackgroundAsync(CurrentFile);
-            SetAsItem.Items.Add(BackgroundItem);
-            Flyout.Items.Add(SetAsItem);
-        }   
 
         //Fit to Window Item
         MenuFlyoutItem FitItem = new MenuFlyoutItem { Text = $"Fit to Window", Icon = new FontIcon() { Glyph = "\uE9A6" } };
@@ -663,7 +734,6 @@ public sealed partial class VisualPlayer : UserControl
         MenuFlyoutItem FileInformationItem = new MenuFlyoutItem { Text = $"File Information", Icon = new FontIcon() { Glyph = "\uE946" } };
         FileInformationItem.Click += async (_, __) => ParentPage?.ParentPage?.MainViewContent.IsPaneOpen = true;
         Flyout.Items.Add(FileInformationItem);
-
 
         Flyout.ShowAt(s, e.GetPosition(s));
     }
@@ -727,10 +797,6 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
-
-
-
-
     private void VisualPlayerPresenter_Tapped(object sender, TappedRoutedEventArgs e)
     {
         Grid GD = (Grid)sender;
@@ -746,7 +812,6 @@ public sealed partial class VisualPlayer : UserControl
             presenter.MediaPlayer.Play();
         }
     }
-
 
     private async void VisualPlayerPresenter_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
@@ -834,12 +899,10 @@ public sealed partial class VisualPlayer : UserControl
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-
         //Copy Frame Item
         MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Frame", Icon = new SymbolIcon(Symbol.Copy) };
         CopyFrameItem.Click += async (_, __) => CopyFrameToClipboard();
         Flyout.Items.Add(CopyFrameItem);
-
 
         //Copy as Path Item
         MenuFlyoutItem CopyAsPathItem = new MenuFlyoutItem { Text = $"Copy as Path", Icon = new FontIcon() { Glyph = "\uE62F" } };
@@ -857,12 +920,18 @@ public sealed partial class VisualPlayer : UserControl
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-
         //Fit to Window Item
         MenuFlyoutItem FitItem = new MenuFlyoutItem { Text = $"Fit to Window", Icon = new FontIcon() { Glyph = "\uE9A6" } };
         FitItem.Click += async (_, __) => FitContentToWidth();
         Flyout.Items.Add(FitItem);
 
+        //Separator
+        Flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //Reverse Image Search Item
+        MenuFlyoutItem ReverseImageSearchItem = new MenuFlyoutItem { Text = $"Reverse Image Search", Icon = new FontIcon() { Glyph = "\uF6FA" } };
+        ReverseImageSearchItem.Click += async (_, __) => await Launcher.LaunchUriAsync(new Uri(Settings.Current.ReverseImageSearchProvider));
+        Flyout.Items.Add(ReverseImageSearchItem);
 
         //File Information Item
         MenuFlyoutItem FileInformationItem = new MenuFlyoutItem { Text = $"File Information", Icon = new FontIcon() { Glyph = "\uE946" } };
@@ -2235,8 +2304,91 @@ public sealed partial class VisualPlayer : UserControl
     {
         if (VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter && presenter.MediaPlayer != null)
         {
-            // Only enable MediaPlayer looping for RepeatOne mode
-            presenter.MediaPlayer.IsLoopingEnabled = (e == RepeatMode.RepeatOne);
+            // Handle repeat mode changes dynamically
+            if (e == RepeatMode.RepeatOne && CurrentFile != null)
+            {
+                _isSeamlessLooping = true;
+                _initialMediaOpened = false; // Reset for new source
+                
+                // Switch to seamless looping using MediaPlaybackList
+                var mediaSource = MediaSource.CreateFromUri(new Uri(CurrentFile.Path));
+                var playbackItem = new MediaPlaybackItem(mediaSource);
+                var playbackList = new MediaPlaybackList();
+                
+                // Enable gapless playback for seamless loops
+                playbackList.AutoRepeatEnabled = true;
+                playbackList.MaxPrefetchTime = TimeSpan.FromSeconds(5);
+                playbackList.Items.Add(playbackItem);
+                
+                // Store current position before switching
+                var currentPosition = presenter.MediaPlayer.PlaybackSession?.Position ?? TimeSpan.Zero;
+                var isPlaying = presenter.MediaPlayer.PlaybackSession?.PlaybackState == MediaPlaybackState.Playing;
+                
+                // Set new source
+                presenter.MediaPlayer.Source = playbackList;
+                
+                // Restore position and playback state after source is loaded
+                TypedEventHandler<MediaPlayer, object> handler = null;
+                handler = new TypedEventHandler<MediaPlayer, object>((s, args) =>
+                {
+                    var dq = App.Current.ActiveWindow?.DispatcherQueue ?? App.DispatcherQueue;
+                    dq.TryEnqueue(() =>
+                    {
+                        if (s.PlaybackSession != null)
+                        {
+                            s.PlaybackSession.Position = currentPosition;
+                            if (isPlaying)
+                            {
+                                s.Play();
+                            }
+                        }
+                    });
+                    s.MediaOpened -= handler;
+                });
+                presenter.MediaPlayer.MediaOpened += handler;
+            }
+            else
+            {
+                _isSeamlessLooping = false;
+                _initialMediaOpened = false; // Reset for new source
+                
+                // Disable looping or use standard loop for RepeatAll
+                // Check if current source is a MediaPlaybackList
+                if (presenter.MediaPlayer.Source is MediaPlaybackList && CurrentFile != null)
+                {
+                    // Switch back to regular MediaSource for non-RepeatOne modes
+                    var currentPosition = presenter.MediaPlayer.PlaybackSession?.Position ?? TimeSpan.Zero;
+                    var isPlaying = presenter.MediaPlayer.PlaybackSession?.PlaybackState == MediaPlaybackState.Playing;
+                    
+                    presenter.MediaPlayer.SetUriSource(new Uri(CurrentFile.Path));
+                    presenter.MediaPlayer.IsLoopingEnabled = false;
+                    
+                    // Restore position and playback state
+                    TypedEventHandler<MediaPlayer, object> handler = null;
+                    handler = new TypedEventHandler<MediaPlayer, object>((s, args) =>
+                    {
+                        var dq = App.Current.ActiveWindow?.DispatcherQueue ?? App.DispatcherQueue;
+                        dq.TryEnqueue(() =>
+                        {
+                            if (s.PlaybackSession != null)
+                            {
+                                s.PlaybackSession.Position = currentPosition;
+                                if (isPlaying)
+                                {
+                                    s.Play();
+                                }
+                            }
+                        });
+                        s.MediaOpened -= handler;
+                    });
+                    presenter.MediaPlayer.MediaOpened += handler;
+                }
+                else
+                {
+                    // Already using regular source, just toggle IsLoopingEnabled
+                    presenter.MediaPlayer.IsLoopingEnabled = false;
+                }
+            }
         }
     }
 
@@ -2246,8 +2398,5 @@ public sealed partial class VisualPlayer : UserControl
     {
         return VideoElement?.Visibility == Visibility.Visible;
     }
-
 }
-
-
 
