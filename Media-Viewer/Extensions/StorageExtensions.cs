@@ -107,7 +107,7 @@ namespace MediaViewer.Extensions
 
         public static async Task<ImageIcon?> GetAppIconAsync(string FilePath)
         {
-            if (!string.IsNullOrEmpty(FilePath)) 
+            if (!string.IsNullOrEmpty(FilePath) && File.Exists(FilePath)) 
             {
                 var exe = await StorageFile.GetFileFromPathAsync(FilePath);
                 var thumb = await exe.GetThumbnailAsync(ThumbnailMode.SingleItem, 64, ThumbnailOptions.UseCurrentScale);
