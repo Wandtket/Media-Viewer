@@ -99,8 +99,8 @@ namespace MediaViewer
             else if (Debugger.IsAttached)
             {
                 StorageFile File;
-                //File = await StorageFile.GetFileFromPathAsync(@"Z:\TV Shows\Aqua Teen Hunger Force\Season 01\Episode 05. Balloonenstein-5.mkv");
-                File = await StorageFile.GetFileFromPathAsync("C:\\Users\\wandt\\OneDrive\\Pictures\\Responses\\ScarletFire.mp3");
+                File = await StorageFile.GetFileFromPathAsync(@"Z:\TV Shows\Aqua Teen Hunger Force\Season 01\Episode 05. Balloonenstein-5.mkv");
+                //File = await StorageFile.GetFileFromPathAsync("C:\\Users\\wandt\\OneDrive\\Pictures\\Responses\\ScarletFire.mp3");
                 LastSortEntry = await Folders.GetSortOrder(File.Path);
 
                 if (Files.GetMediaType(File.Path) == MediaType.Audio)
