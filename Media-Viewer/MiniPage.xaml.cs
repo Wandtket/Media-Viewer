@@ -30,6 +30,7 @@ using PlaybackState = NAudio.Wave.PlaybackState;
 
 namespace MediaViewer
 {
+
     public sealed partial class MiniPage : Page
     {
         private bool isNarrowView = false;
