@@ -722,54 +722,166 @@ namespace MediaViewer.Extensions
                 ChapterMarkersCanvas.Children.Remove(MarkInMarker);
             }
 
-            // Remove existing Mark Out marker if it exists
+            // Remove existing Mark Out marker if it exists  
             if (MarkOutMarker != null && ChapterMarkersCanvas.Children.Contains(MarkOutMarker))
             {
                 ChapterMarkersCanvas.Children.Remove(MarkOutMarker);
             }
+            
+            // Also remove any Grid-based markers tagged as mark indicators
+            var markersToRemove = ChapterMarkersCanvas.Children.OfType<Grid>()
+                .Where(g => g.Tag?.ToString() == "MarkOutMarker" || g.Tag?.ToString() == "MarkInMarker")
+                .ToList();
+            foreach (var marker in markersToRemove)
+            {
+                ChapterMarkersCanvas.Children.Remove(marker);
+            }
 
-            // Add Mark In marker
+            // Remove any existing mark region highlighting
+            var existingRegion = ChapterMarkersCanvas.Children.OfType<Rectangle>()
+                .FirstOrDefault(r => r.Name == "MarkRegionHighlight");
+            if (existingRegion != null)
+            {
+                ChapterMarkersCanvas.Children.Remove(existingRegion);
+            }
+
+            // Add highlighted region between Mark In and Mark Out
+            if (MarkInTime.HasValue && MarkOutTime.HasValue)
+            {
+                double markInPos = (MarkInTime.Value.TotalSeconds / totalDuration) * sliderWidth + thumbOffset;
+                double markOutPos = (MarkOutTime.Value.TotalSeconds / totalDuration) * sliderWidth + thumbOffset;
+                double regionWidth = markOutPos - markInPos;
+
+                if (regionWidth > 0)
+                {
+                    var regionHighlight = new Rectangle
+                    {
+                        Name = "MarkRegionHighlight",
+                        Width = regionWidth,
+                        Height = 6,
+                        Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(60, 255, 193, 7)), // Semi-transparent amber
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+
+                    Canvas.SetLeft(regionHighlight, markInPos);
+                    Canvas.SetTop(regionHighlight, 13.5); // Center with the slider track
+
+                    ChapterMarkersCanvas.Children.Insert(0, regionHighlight); // Add behind markers
+
+                    // Calculate duration between marks
+                    TimeSpan duration = MarkOutTime.Value - MarkInTime.Value;
+                    ToolTipService.SetToolTip(regionHighlight, 
+                        $"Marked Section: {FormatTimeSpan(duration)}\n" +
+                        $"From: {FormatTimeSpan(MarkInTime.Value)}\n" +
+                        $"To: {FormatTimeSpan(MarkOutTime.Value)}");
+                }
+            }
+
+            // Add Mark In marker with enhanced visibility
             if (MarkInTime.HasValue)
             {
                 double position = (MarkInTime.Value.TotalSeconds / totalDuration) * sliderWidth;
                 position += thumbOffset;
 
-                MarkInMarker = new Rectangle
+                // Create a composite marker with a flag shape
+                var markInContainer = new Grid
                 {
-                    Width = 1,
-                    Height = 30,
-                    Fill = new SolidColorBrush(Colors.Red),
-                    VerticalAlignment = VerticalAlignment.Center
+                    Width = 20,
+                    Height = 40,
+                    Tag = "MarkInMarker"
                 };
 
-                Canvas.SetLeft(MarkInMarker, position);
-                Canvas.SetTop(MarkInMarker, 1);
+                // Vertical line
+                var line = new Rectangle
+                {
+                    Width = 3,
+                    Height = 40,
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 76, 175, 80)), // Bright green
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Stretch
+                };
 
-                ToolTipService.SetToolTip(MarkInMarker, $"Mark In: {FormatTimeSpan(MarkInTime.Value)}");
+                // Flag/triangle at top for "In"
+                var flag = new Polygon
+                {
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 76, 175, 80)),
+                    Points = new PointCollection
+                    {
+                        new Windows.Foundation.Point(2, 0),
+                        new Windows.Foundation.Point(2, 10),
+                        new Windows.Foundation.Point(12, 5)
+                    },
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+
+                markInContainer.Children.Add(line);
+                markInContainer.Children.Add(flag);
+
+                MarkInMarker = markInContainer;
+
+                Canvas.SetLeft(MarkInMarker, position - 10); // Center the 20px wide marker
+                Canvas.SetTop(MarkInMarker, 0);
+
+                ToolTipService.SetToolTip(MarkInMarker, 
+                    $"Mark In: {FormatTimeSpan(MarkInTime.Value)}\n" +
+                    $"Press [ to set/clear");
 
                 ChapterMarkersCanvas.Children.Add(MarkInMarker);
             }
 
-            // Add Mark Out marker
+            // Add Mark Out marker with enhanced visibility
             if (MarkOutTime.HasValue)
             {
                 double position = (MarkOutTime.Value.TotalSeconds / totalDuration) * sliderWidth;
                 position += thumbOffset;
 
-                MarkOutMarker = new Rectangle
+                // Create a composite marker with a flag shape
+                var markOutContainer = new Grid
                 {
-                    Width = 1,
-                    Height = 30,
-                    Fill = new SolidColorBrush(Colors.Red),
-                    VerticalAlignment = VerticalAlignment.Center
+                    Width = 20,
+                    Height = 40,
+                    Tag = "MarkOutMarker"
                 };
 
-                Canvas.SetLeft(MarkOutMarker, position);
-                Canvas.SetTop(MarkOutMarker, 1);
+                // Vertical line
+                var line = new Rectangle
+                {
+                    Width = 3,
+                    Height = 40,
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 244, 67, 54)), // Bright red
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Stretch
+                };
 
-                ToolTipService.SetToolTip(MarkOutMarker, $"Mark Out: {FormatTimeSpan(MarkOutTime.Value)}");
+                // Flag/triangle at top for "Out"
+                var flag = new Polygon
+                {
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 244, 67, 54)),
+                    Points = new PointCollection
+                    {
+                        new Windows.Foundation.Point(18, 0),
+                        new Windows.Foundation.Point(18, 10),
+                        new Windows.Foundation.Point(8, 5)
+                    },
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
 
-                ChapterMarkersCanvas.Children.Add(MarkOutMarker);
+                markOutContainer.Children.Add(line);
+                markOutContainer.Children.Add(flag);
+
+                Canvas.SetLeft(markOutContainer, position - 10); // Center the 20px wide marker
+                Canvas.SetTop(markOutContainer, 0);
+
+                ToolTipService.SetToolTip(markOutContainer, 
+                    $"Mark Out: {FormatTimeSpan(MarkOutTime.Value)}\n" +
+                    $"Press ] to set/clear");
+
+                ChapterMarkersCanvas.Children.Add(markOutContainer);
+                
+                // Keep reference for compatibility with existing code
+                MarkOutMarker = line;
             }
         }
 
