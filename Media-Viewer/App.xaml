@@ -298,7 +298,7 @@
                                                                         <ControlTemplate TargetType="Thumb">
                                                                             <Ellipse x:Name="ellipse"
                                                                         Stroke="{TemplateBinding Background}"
-                                                                        StrokeThickness="2"
+                                                                        StrokeThickness="3"
                                                                         Fill="{TemplateBinding Foreground}" />
                                                                         </ControlTemplate>
                                                                     </Setter.Value>
@@ -388,6 +388,9 @@
                                                                 </VisualState>
                                                                 <VisualState x:Name="PointerOver">
                                                                     <Storyboard>
+                                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HorizontalTrackRect" Storyboard.TargetProperty="Height">
+                                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="6" />
+                                                                        </ObjectAnimationUsingKeyFrames>
                                                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HorizontalTrackRect" Storyboard.TargetProperty="Fill">
                                                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SliderTrackFillPointerOver}" />
                                                                         </ObjectAnimationUsingKeyFrames>
@@ -396,6 +399,12 @@
                                                                         </ObjectAnimationUsingKeyFrames>
                                                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HorizontalThumb" Storyboard.TargetProperty="Background">
                                                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SliderThumbBackgroundPointerOver}" />
+                                                                        </ObjectAnimationUsingKeyFrames>
+                                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HorizontalThumb" Storyboard.TargetProperty="Height">
+                                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="32" />
+                                                                        </ObjectAnimationUsingKeyFrames>
+                                                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HorizontalThumb" Storyboard.TargetProperty="Width">
+                                                                            <DiscreteObjectKeyFrame KeyTime="0" Value="32" />
                                                                         </ObjectAnimationUsingKeyFrames>
                                                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="VerticalThumb" Storyboard.TargetProperty="Background">
                                                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SliderThumbBackgroundPointerOver}" />
@@ -462,7 +471,7 @@
                                                                 </Grid.RowDefinitions>
                                                                 <Rectangle x:Name="HorizontalTrackRect"
                                                             Fill="{TemplateBinding Background}"
-                                                            Height="{ThemeResource SliderTrackThemeHeight}"
+                                                            Height="4"
                                                             Grid.Row="1"
                                                             Grid.ColumnSpan="3" />
                                                                 <ProgressBar x:Name="DownloadProgressIndicator"
@@ -495,8 +504,8 @@
                                                             Grid.ColumnSpan="3" />
                                                                 <Thumb x:Name="HorizontalThumb"
                                                             Style="{StaticResource SliderThumbStyle}"
-                                                            Height="24"
-                                                            Width="24"
+                                                            Height="28"
+                                                            Width="28"
                                                             Grid.Row="0"
                                                             Grid.RowSpan="3"
                                                             Grid.Column="1"
@@ -822,14 +831,14 @@
                                                 </Grid.RowDefinitions>
                                                 <Canvas x:Name="ChapterMarkersCanvas"
                                                     Margin="12,0"
-                                                    Height="33"
+                                                    Height="40"
                                                     VerticalAlignment="Center"
                                                     IsHitTestVisible="False">
                                                 </Canvas>
                                                 <Slider x:Name="ProgressSlider"
                                                     Margin="12,0"
                                                     MinWidth="80"
-                                                    Height="33"
+                                                    Height="40"
                                                     VerticalAlignment="Center"
                                                     ToolTipService.ToolTip="Something"
                                                     IsThumbToolTipEnabled="False"/>
