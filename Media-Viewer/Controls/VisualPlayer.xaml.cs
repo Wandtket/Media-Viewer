@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.WinUI;
+using CommunityToolkit.WinUI;
 using FFMpegCore;
 using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
@@ -667,7 +667,7 @@ public sealed partial class VisualPlayer : UserControl
 
         //Video Converter
 
-        if (File.Exists(Settings.))
+        if (File.Exists(Settings.Current.VideoConverterPath))
         {
             MenuFlyoutItem ConvertVideoItem = new MenuFlyoutItem { Text = $"Convert Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath) };
             ConvertVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Converter); ;
