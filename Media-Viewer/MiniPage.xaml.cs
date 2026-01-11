@@ -1,4 +1,5 @@
 using CommunityToolkit.WinUI;
+using MediaViewer.Controls;
 using MediaViewer.Controls.Dialogs;
 using MediaViewer.Enums;
 using MediaViewer.Extensions;
@@ -26,6 +27,7 @@ using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
+using Windows.System;
 using PlaybackState = NAudio.Wave.PlaybackState;
 
 namespace MediaViewer
@@ -99,6 +101,16 @@ namespace MediaViewer
 
         private AudioPlaylistItem lockedItem = null;
 
+        // Mark In/Out functionality
+        private TimeSpan? _markInPosition = null;
+        private TimeSpan? _markOutPosition = null;
+        private bool _isLoopingMarkedSection = false;
+
+        // Mark In/Out visual markers
+        private UIElement _markInMarker;
+        private UIElement _markOutMarker;
+
+
         public MiniPage(StorageFile? File = null)
         {
             InitializeComponent();
@@ -148,20 +160,6 @@ namespace MediaViewer
             }
         }
 
-        private async void Window_Closed(object sender, Microsoft.UI.Xaml.WindowEventArgs args)
-        {
-            if (hasUnsavedMetadata && currentMediaProperties != null)
-            {
-                args.Handled = true;
-                await SaveCurrentMetadata();
-                App.Current.ActiveWindow.Closed -= Window_Closed;
-                App.Current.ActiveWindow.Close();
-            }
-
-            // Cleanup NAudio resources
-            CleanupAudioPlayer();
-        }
-
         private void CleanupAudioPlayer()
         {
             try
@@ -192,14 +190,659 @@ namespace MediaViewer
             }
         }
 
+
+        #region View Management
+
+        private async void Window_Closed(object sender, Microsoft.UI.Xaml.WindowEventArgs args)
+        {
+            if (hasUnsavedMetadata && currentMediaProperties != null)
+            {
+                args.Handled = true;
+                await SaveCurrentMetadata();
+                App.Current.ActiveWindow.Closed -= Window_Closed;
+                App.Current.ActiveWindow.Close();
+            }
+
+            // Cleanup NAudio resources
+            CleanupAudioPlayer();
+        }
+
+        private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            bool shouldBeNarrow = e.NewSize.Width < 800;
+            bool shouldTransportBeNarrow = e.NewSize.Width < 600;
+
+            if (shouldBeNarrow != isNarrowView)
+            {
+                isNarrowView = shouldBeNarrow;
+
+                // If true set to narrow view, else wide view
+                (isNarrowView ? (Action)SetupNarrowView : SetupWideView)();
+            }
+
+            if (shouldTransportBeNarrow != isTransportNarrow)
+            {
+                isTransportNarrow = shouldTransportBeNarrow;
+
+                // If true set to narrow view, else wide view
+                (isTransportNarrow ? (Action)SetupNarrowTransport : SetupWideTransport)();
+            }
+        }
+
+        private void Page_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs args)
+        {
+            if ((char)args.Character == '[')
+            {
+                HandleMarkIn();
+                args.Handled = true;
+            }
+            else if ((char)args.Character == ']')
+            {
+                HandleMarkOut();
+                args.Handled = true;
+            }
+            else if ((char)args.Character == '\\')
+            {
+                ClearMarks();
+                args.Handled = true;
+            }
+        }
+
+
+        #region Mark In/Out
+
+        private void MarkInButton_Click(object sender, RoutedEventArgs e)
+        {
+            HandleMarkIn();
+        }
+
+        private void MarkOutButton_Click(object sender, RoutedEventArgs e)
+        {
+            HandleMarkOut();
+        }
+
+        private void ClearMarksButton_Click(object sender, RoutedEventArgs e)
+        {
+            ClearMarks();
+        }
+
+        private void HandleMarkIn()
+        {
+            if (audioFileReader == null || Player == null || currentItem == null)
+            {
+                return;
+            }
+
+            var currentPos = audioFileReader.CurrentTime;
+
+            // If Mark In is set and user presses [ again at (or near) the same position, clear it
+            if (_markInPosition.HasValue && Math.Abs((_markInPosition.Value - currentPos).TotalSeconds) < 0.1)
+            {
+                _markInPosition = null;
+                _isLoopingMarkedSection = false;
+                ClearMarkInVisual();
+                Debug.WriteLine("Mark In cleared");
+                return;
+            }
+
+            _markInPosition = currentPos;
+            Debug.WriteLine($"Mark In set at: {_markInPosition.Value:hh\\:mm\\:ss}");
+            UpdateMarkInOutMarkers();
+
+            // If Mark In is after Mark Out, clear Mark Out
+            if (_markOutPosition.HasValue && _markInPosition.Value >= _markOutPosition.Value)
+            {
+                _markOutPosition = null;
+                _isLoopingMarkedSection = false;
+                ClearMarkOutVisual();
+                Debug.WriteLine("Mark Out cleared (Mark In was after Mark Out)");
+                return;
+            }
+
+            // Enable looping if both marks are set
+            if (_markInPosition.HasValue && _markOutPosition.HasValue)
+            {
+                EnableMarkedSectionLooping();
+            }
+        }
+
+        private void HandleMarkOut()
+        {
+            if (audioFileReader == null || Player == null || currentItem == null)
+            {
+                return;
+            }
+
+            var currentPos = audioFileReader.CurrentTime;
+
+            // If Mark Out is set and user presses ] again at (or near) the same position, clear it
+            if (_markOutPosition.HasValue && Math.Abs((_markOutPosition.Value - currentPos).TotalSeconds) < 0.1)
+            {
+                _markOutPosition = null;
+                _isLoopingMarkedSection = false;
+                ClearMarkOutVisual();
+                Debug.WriteLine("Mark Out cleared");
+                return;
+            }
+
+            _markOutPosition = currentPos;
+            Debug.WriteLine($"Mark Out set at: {_markOutPosition.Value:hh\\:mm\\:ss}");
+            UpdateMarkInOutMarkers();
+
+            // If Mark Out is before Mark In, clear Mark In
+            if (_markInPosition.HasValue && _markOutPosition.Value <= _markInPosition.Value)
+            {
+                _markInPosition = null;
+                _isLoopingMarkedSection = false;
+                ClearMarkInVisual();
+                Debug.WriteLine("Mark In cleared (Mark Out was before Mark In)");
+                return;
+            }
+
+            // Enable looping if both marks are set
+            if (_markInPosition.HasValue && _markOutPosition.HasValue)
+            {
+                EnableMarkedSectionLooping();
+            }
+        }
+
+        private void ClearMarks()
+        {
+            _markInPosition = null;
+            _markOutPosition = null;
+            _isLoopingMarkedSection = false;
+            ClearMarkInVisual();
+            ClearMarkOutVisual();
+            Debug.WriteLine("All marks cleared");
+        }
+
+        private void EnableMarkedSectionLooping()
+        {
+            _isLoopingMarkedSection = true;
+            Debug.WriteLine($"Marked section looping enabled: {_markInPosition.Value:hh\\:mm\\:ss} to {_markOutPosition.Value:hh\\:mm\\:ss}");
+        }
+
+        private void ProgressSlider_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // Update marker positions when slider size changes
+            UpdateMarkInOutMarkers();
+        }
+
+        private void UpdateMarkInOutMarkers()
+        {
+            if (MarkInOutCanvas == null || totalDuration.TotalSeconds <= 0)
+                return;
+
+            double sliderWidth = ProgressSlider.ActualWidth;
+
+            // Default WinUI Slider thumb width is 20px
+            double thumbWidth = 20.0;
+            double thumbOffset = thumbWidth / 2.0;
+
+            // Remove existing Mark In marker if it exists
+            if (_markInMarker != null && MarkInOutCanvas.Children.Contains(_markInMarker))
+            {
+                MarkInOutCanvas.Children.Remove(_markInMarker);
+                _markInMarker = null;
+            }
+
+            // Remove existing Mark Out marker if it exists  
+            if (_markOutMarker != null && MarkInOutCanvas.Children.Contains(_markOutMarker))
+            {
+                MarkInOutCanvas.Children.Remove(_markOutMarker);
+                _markOutMarker = null;
+            }
+
+            // Remove any existing mark region highlighting
+            var existingRegion = MarkInOutCanvas.Children.OfType<Microsoft.UI.Xaml.Shapes.Rectangle>()
+                .FirstOrDefault(r => r.Name == "MarkRegionHighlight");
+            if (existingRegion != null)
+            {
+                MarkInOutCanvas.Children.Remove(existingRegion);
+            }
+
+            // Add highlighted region between Mark In and Mark Out
+            if (_markInPosition.HasValue && _markOutPosition.HasValue)
+            {
+                double markInPos = (_markInPosition.Value.TotalSeconds / totalDuration.TotalSeconds) * sliderWidth + thumbOffset;
+                double markOutPos = (_markOutPosition.Value.TotalSeconds / totalDuration.TotalSeconds) * sliderWidth + thumbOffset;
+                double regionWidth = markOutPos - markInPos;
+
+                if (regionWidth > 0)
+                {
+                    var regionHighlight = new Microsoft.UI.Xaml.Shapes.Rectangle
+                    {
+                        Name = "MarkRegionHighlight",
+                        Width = regionWidth,
+                        Height = 6,
+                        Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(60, 255, 193, 7)), // Semi-transparent amber
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+
+                    Canvas.SetLeft(regionHighlight, markInPos);
+                    Canvas.SetTop(regionHighlight, 13.5); // Center with the slider track
+
+                    MarkInOutCanvas.Children.Insert(0, regionHighlight); // Add behind markers
+
+                    // Calculate duration between marks
+                    TimeSpan duration = _markOutPosition.Value - _markInPosition.Value;
+                    ToolTipService.SetToolTip(regionHighlight,
+                        $"Marked Section: {FormatTime(duration)}\n" +
+                        $"From: {FormatTime(_markInPosition.Value)}\n" +
+                        $"To: {FormatTime(_markOutPosition.Value)}");
+                }
+            }
+
+            // Add Mark In marker with enhanced visibility
+            if (_markInPosition.HasValue)
+            {
+                double position = (_markInPosition.Value.TotalSeconds / totalDuration.TotalSeconds) * sliderWidth;
+                position += thumbOffset;
+
+                // Create a composite marker with a flag shape
+                var markInContainer = new Grid
+                {
+                    Width = 20,
+                    Height = 40
+                };
+
+                // Vertical line
+                var line = new Microsoft.UI.Xaml.Shapes.Rectangle
+                {
+                    Width = 3,
+                    Height = 40,
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 76, 175, 80)), // Bright green
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Stretch
+                };
+
+                // Flag/triangle at top for "In"
+                var flag = new Microsoft.UI.Xaml.Shapes.Polygon
+                {
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 76, 175, 80)),
+                    Points = new Microsoft.UI.Xaml.Media.PointCollection
+                    {
+                        new Windows.Foundation.Point(2, 0),
+                        new Windows.Foundation.Point(2, 10),
+                        new Windows.Foundation.Point(12, 5)
+                    },
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+
+                markInContainer.Children.Add(line);
+                markInContainer.Children.Add(flag);
+
+                _markInMarker = markInContainer;
+
+                Canvas.SetLeft(_markInMarker, position - 10); // Center the 20px wide marker
+                Canvas.SetTop(_markInMarker, 0);
+
+                ToolTipService.SetToolTip(_markInMarker,
+                    $"Mark In: {FormatTime(_markInPosition.Value)}\n" +
+                    $"Press [ to set/clear");
+
+                MarkInOutCanvas.Children.Add(_markInMarker);
+            }
+
+            // Add Mark Out marker with enhanced visibility
+            if (_markOutPosition.HasValue)
+            {
+                double position = (_markOutPosition.Value.TotalSeconds / totalDuration.TotalSeconds) * sliderWidth;
+                position += thumbOffset;
+
+                // Create a composite marker with a flag shape
+                var markOutContainer = new Grid
+                {
+                    Width = 20,
+                    Height = 40
+                };
+
+                // Vertical line
+                var line = new Microsoft.UI.Xaml.Shapes.Rectangle
+                {
+                    Width = 3,
+                    Height = 40,
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 244, 67, 54)), // Bright red
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Stretch
+                };
+
+                // Flag/triangle at top for "Out"
+                var flag = new Microsoft.UI.Xaml.Shapes.Polygon
+                {
+                    Fill = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 244, 67, 54)),
+                    Points = new Microsoft.UI.Xaml.Media.PointCollection
+                    {
+                        new Windows.Foundation.Point(18, 0),
+                        new Windows.Foundation.Point(18, 10),
+                        new Windows.Foundation.Point(8, 5)
+                    },
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+
+                markOutContainer.Children.Add(line);
+                markOutContainer.Children.Add(flag);
+
+                _markOutMarker = markOutContainer;
+
+                Canvas.SetLeft(_markOutMarker, position - 10); // Center the 20px wide marker
+                Canvas.SetTop(_markOutMarker, 0);
+
+                ToolTipService.SetToolTip(_markOutMarker,
+                    $"Mark Out: {FormatTime(_markOutPosition.Value)}\n" +
+                    $"Press ] to set/clear");
+
+                MarkInOutCanvas.Children.Add(_markOutMarker);
+            }
+        }
+
+        private void ClearMarkInVisual()
+        {
+            if (_markInMarker != null && MarkInOutCanvas != null)
+            {
+                MarkInOutCanvas.Children.Remove(_markInMarker);
+                _markInMarker = null;
+            }
+        }
+
+        private void ClearMarkOutVisual()
+        {
+            if (_markOutMarker != null && MarkInOutCanvas != null)
+            {
+                MarkInOutCanvas.Children.Remove(_markOutMarker);
+                _markOutMarker = null;
+            }
+        }
+
+        #endregion
+
+        private void SetupWideView()
+        {
+            // Show both views side by side
+            ViewToggleButtons.Visibility = Visibility.Collapsed;
+            ContentSplitter.Visibility = Visibility.Visible;
+
+            PlaylistView.Visibility = Visibility.Visible;
+            MetaDataView.Visibility = Visibility.Visible;
+
+            PlaylistView.SetValue(Grid.ColumnProperty, 0);
+            PlaylistView.ClearValue(Grid.ColumnSpanProperty);
+            MetaDataView.SetValue(Grid.ColumnProperty, 1);
+            MetaDataView.ClearValue(Grid.ColumnSpanProperty);
+
+            PlaylistColumn.Width = GridLength.Auto;
+            AlbumArtColumn.Width = new GridLength(1, GridUnitType.Star);
+        }
+
+        private void SetupNarrowView()
+        {
+            // Show toggle buttons and current view
+            ViewToggleButtons.Visibility = Visibility.Visible;
+            ContentSplitter.Visibility = Visibility.Collapsed;
+
+            UpdateNarrowView();
+        }
+
+        private void SetupWideTransport()
+        {
+            // Wide transport: Single row with 3 columns
+            TransportGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+            TransportGrid.RowDefinitions[1].Height = new GridLength(0);
+
+            LeftControls.SetValue(Grid.RowProperty, 0);
+            LeftControls.SetValue(Grid.ColumnProperty, 0);
+            LeftControls.ClearValue(Grid.ColumnSpanProperty);
+            LeftControls.HorizontalAlignment = HorizontalAlignment.Left;
+
+            CenterControls.SetValue(Grid.RowProperty, 0);
+            CenterControls.SetValue(Grid.ColumnProperty, 1);
+            CenterControls.SetValue(Grid.ColumnSpanProperty, 1);
+
+            RightControls.SetValue(Grid.RowProperty, 0);
+            RightControls.SetValue(Grid.ColumnProperty, 2);
+            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
+            RightControls.Visibility = Visibility.Visible;
+            RightControls.Spacing = 12;
+
+            // Remove any additional stack panels created for narrow view
+            var extraStackPanels = TransportGrid.Children.OfType<StackPanel>()
+                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
+                .ToList();
+            foreach (var sp in extraStackPanels)
+            {
+                // Remove buttons from the extra panel before removing the panel
+                sp.Children.Clear();
+                TransportGrid.Children.Remove(sp);
+            }
+
+            // Clear and restore original button order for wide view
+            RightControls.Children.Clear();
+            RightControls.Children.Add(RepeatButton);
+            RightControls.Children.Add(ShuffleButton);
+            RightControls.Children.Add(VolumeButton);
+            RightControls.Children.Add(MoreButton);
+
+            TransportTitle.Visibility = Visibility.Visible;
+            ProgressGrid.Margin = new Thickness(0);
+        }
+
+        private void SetupNarrowTransport()
+        {
+            // Narrow transport: 2 rows
+            // Row 0: Timeline spanning full width
+            // Row 1: [Shuffle, Repeat] - [Prev, Play, Next] - [Volume, More]
+            TransportGrid.RowDefinitions[0].Height = GridLength.Auto;
+            TransportGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
+
+            // Timeline at top spanning all columns
+            CenterControls.SetValue(Grid.RowProperty, 0);
+            CenterControls.SetValue(Grid.ColumnProperty, 0);
+            CenterControls.SetValue(Grid.ColumnSpanProperty, 3);
+
+            // Play controls at bottom center
+            LeftControls.SetValue(Grid.RowProperty, 1);
+            LeftControls.SetValue(Grid.ColumnProperty, 1);
+            LeftControls.ClearValue(Grid.ColumnSpanProperty);
+            LeftControls.HorizontalAlignment = HorizontalAlignment.Center;
+
+            // Right controls split: Shuffle & Repeat on left, Volume & More on right
+            RightControls.SetValue(Grid.RowProperty, 1);
+            RightControls.SetValue(Grid.ColumnProperty, 0);
+            RightControls.ClearValue(Grid.ColumnSpanProperty);
+            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
+            RightControls.Visibility = Visibility.Visible;
+            RightControls.Spacing = 8;
+
+            // Remove any existing extra stack panels before creating new ones
+            var existingExtraPanels = TransportGrid.Children.OfType<StackPanel>()
+                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
+                .ToList();
+            foreach (var panel in existingExtraPanels)
+            {
+                panel.Children.Clear();
+                TransportGrid.Children.Remove(panel);
+            }
+
+            // Reorder buttons: Shuffle, Repeat on left side
+            RightControls.Children.Clear();
+            RightControls.Children.Add(ShuffleButton);
+            RightControls.Children.Add(RepeatButton);
+
+            // Create a new stack for Volume and More on the right side
+            var rightSideControls = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Spacing = 8
+            };
+            rightSideControls.Children.Add(VolumeButton);
+            rightSideControls.Children.Add(MoreButton);
+            rightSideControls.SetValue(Grid.RowProperty, 1);
+            rightSideControls.SetValue(Grid.ColumnProperty, 2);
+
+            TransportGrid.Children.Add(rightSideControls);
+
+            TransportTitle.Visibility = Visibility.Collapsed;
+            ProgressGrid.Margin = new Thickness(0);
+        }
+
+        private void ShowPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (isNarrowView)
+            {
+                ShowAlbumArtButton.IsChecked = false;
+                ShowPlaylistButton.IsChecked = true;
+                UpdateNarrowView();
+            }
+        }
+
+        private void ShowAlbumArtButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (isNarrowView)
+            {
+                ShowPlaylistButton.IsChecked = false;
+                ShowAlbumArtButton.IsChecked = true;
+                UpdateNarrowView();
+            }
+        }
+
+        private void UpdateNarrowView()
+        {
+            if (ShowPlaylistButton.IsChecked == true)
+            {
+                // Show playlist only
+                PlaylistView.Visibility = Visibility.Visible;
+                MetaDataView.Visibility = Visibility.Collapsed;
+                PlaylistView.SetValue(Grid.ColumnProperty, 0);
+                PlaylistView.SetValue(Grid.ColumnSpanProperty, 2);
+                PlaylistColumn.Width = new GridLength(1, GridUnitType.Star);
+                AlbumArtColumn.Width = new GridLength(0);
+            }
+            else
+            {
+                // Show album art only
+                PlaylistView.Visibility = Visibility.Collapsed;
+                MetaDataView.Visibility = Visibility.Visible;
+                MetaDataView.SetValue(Grid.ColumnProperty, 0);
+                MetaDataView.SetValue(Grid.ColumnSpanProperty, 2);
+                PlaylistColumn.Width = new GridLength(0);
+                AlbumArtColumn.Width = new GridLength(1, GridUnitType.Star);
+            }
+        }
+
+        #endregion
+
+
+        #region Playlist UI
+
+        private async void PlayTrackButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (isMultiSelectMode) return;
+
+            if (sender is Button button && button.Tag is AudioPlaylistItem item)
+            {
+                // If clicking the currently playing item, toggle play/pause
+                if (item == currentItem && item.IsPlaying)
+                {
+                    // Item is currently playing, so pause it
+                    if (Player != null && Player.PlaybackState == PlaybackState.Playing)
+                    {
+                        Player.Pause();
+                        isPlaying = false;
+                        ProgressTimer.Stop();
+                        UpdatePlayPauseButton(false);
+                        item.IsPlaying = false;
+                    }
+                    else
+                    {
+                        // Resume playback
+                        Player?.Play();
+                        isPlaying = true;
+                        ProgressTimer.Start();
+                        UpdatePlayPauseButton(true);
+                        item.IsPlaying = true;
+                    }
+                }
+                else
+                {
+                    // Update selected item flag for all items
+                    foreach (var playlistItem in playlist)
+                    {
+                        playlistItem.IsSelected = playlistItem == item;
+                    }
+
+                    // Update ListView selection to match
+                    FileList.SelectedItem = item;
+
+                    // Update metadata UI and album art for the new selection
+                    currentMediaProperties = item.Properties;
+                    UpdatePropertiesUI();
+                    await LoadAlbumArt(item.File);
+
+                    // Play the selected item
+                    await PlayItem(item);
+                }
+            }
+        }
+
+        private async void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (isMultiSelectMode) return;
+
+            if (FileList.SelectedItem is AudioPlaylistItem item)
+            {
+                // Update selected item flag for all items
+                foreach (var playlistItem in playlist)
+                {
+                    playlistItem.IsSelected = playlistItem == item;
+                }
+
+                // Update metadata UI without changing playback
+                currentMediaProperties = item.Properties;
+                UpdatePropertiesUI();
+
+                // Load and display album art for the selected item
+                await LoadAlbumArt(item.File);
+            }
+        }
+
+        private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                string searchText = sender.Text.ToLowerInvariant();
+
+                if (string.IsNullOrWhiteSpace(searchText))
+                {
+                    // Show all items
+                    FileList.ItemsSource = playlist;
+                }
+                else
+                {
+                    // Filter playlist
+                    var filtered = playlist.Where(item =>
+                        item.DisplayTitle.ToLowerInvariant().Contains(searchText) ||
+                        item.DisplayArtist.ToLowerInvariant().Contains(searchText) ||
+                        (item.Properties.Album?.ToLowerInvariant().Contains(searchText) ?? false)
+                    ).ToList();
+
+                    FileList.ItemsSource = filtered;
+                }
+            }
+        }
+
+        #endregion
+
+
         #region File Loading
 
         private async Task LoadAudioFile(StorageFile file)
         {
             try
             {
-                var sortEntry = await Folders.GetSortOrder(file.Path);
-
                 // Load folder files
                 var folder = await file.GetFolder();
                 var files = (await folder.GetFilesAsync()).ToList();
@@ -303,6 +946,13 @@ namespace MediaViewer
                     await SaveCurrentMetadata();
                 }
 
+                // Clear Mark In/Out when switching tracks
+                _markInPosition = null;
+                _markOutPosition = null;
+                _isLoopingMarkedSection = false;
+                ClearMarkInVisual();
+                ClearMarkOutVisual();
+
                 // Update current item
                 if (currentItem != null)
                 {
@@ -398,29 +1048,22 @@ namespace MediaViewer
                 varispeedProvider = null;
             }
 
-            // Add volume control
-            volumeProvider = new VolumeSampleProvider(chain);
-            volumeProvider.Volume = (float)lastVolume;
-            chain = volumeProvider;
-
             // Add stereo pan control (before effects so pan affects the effected signal)
             panProvider = new StereoPanSampleProvider(chain);
             panProvider.Pan = stereoPan;
             chain = panProvider;
 
-            // Add isolation effect if enabled (takes priority over reverb)
             if (isIsolationEnabled)
             {
                 isolationProvider = new IsolationSampleProvider(chain);
                 isolationProvider.Intensity = 1.0f; // Always 100%
-                isolationProvider.BassBoost = 0.5f; // Fixed at 50%
+                isolationProvider.BassBoost = 0.0f; // Fixed at 0%
                 isolationProvider.EnableEffect = true;
                 chain = isolationProvider;
 
                 // Disable reverb if isolation is active
                 reverbProvider = null;
             }
-            // Add reverb effect if enabled (only if isolation is not active)
             else if (isReverbEnabled)
             {
                 reverbProvider = new ReverbSampleProvider(chain);
@@ -436,11 +1079,15 @@ namespace MediaViewer
                 isolationProvider = null;
             }
 
+            // Add volume control
+            volumeProvider = new VolumeSampleProvider(chain);
+            volumeProvider.Volume = (float)lastVolume;
+            chain = volumeProvider;
+
             finalSampleProvider = chain;
         }
 
 
-        private TextBlock panValueTextBlock = null;
 
         private void StereoPanSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
@@ -453,8 +1100,8 @@ namespace MediaViewer
                 panProvider.Pan = stereoPan;
             }
 
-            // Cache the text block reference if we haven't already
-            if (panValueTextBlock == null && sender is Slider slider)
+            TextBlock panValueTextBlock = null;
+            if (sender is Slider slider)
             {
                 // Navigate up to find the parent StackPanel
                 DependencyObject parent = slider;
@@ -534,6 +1181,39 @@ namespace MediaViewer
 
                 if (audioFileReader != null && isNearEnd)
                 {
+                    // Handle Mark In only set: loop to Mark In
+                    if (_markInPosition.HasValue && !_markOutPosition.HasValue)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(repeatDelaySeconds));
+                        
+                        try
+                        {
+                            audioFileReader.Position = 0;
+                            audioFileReader.CurrentTime = _markInPosition.Value;
+                            
+                            if (Player != null && Player.PlaybackState != PlaybackState.Playing)
+                            {
+                                Player.Play();
+                                isPlaying = true;
+                                ProgressTimer.Start();
+                                UpdatePlayPauseButton(true);
+
+                                if (currentItem != null)
+                                {
+                                    currentItem.IsPlaying = true;
+                                }
+                            }
+                            
+                            Debug.WriteLine($"Track ended, looping to Mark In: {_markInPosition.Value:hh\\:mm\\:ss}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error looping to Mark In: {ex.Message}");
+                        }
+                        
+                        return;
+                    }
+                    
                     if (Settings.Current.RepeatMode == RepeatMode.RepeatOne)
                     {
                         await Task.Delay(TimeSpan.FromSeconds(repeatDelaySeconds));
@@ -679,6 +1359,31 @@ namespace MediaViewer
                         if (totalDuration.TotalSeconds > 0)
                         {
                             ProgressSlider.Value = currentPosition.TotalSeconds;
+                        }
+
+                        // Handle marked section looping
+                        if (_isLoopingMarkedSection && _markInPosition.HasValue && _markOutPosition.HasValue)
+                        {
+                            if (currentPosition >= _markOutPosition.Value)
+                            {
+                                // Loop back to Mark In position
+                                audioFileReader.CurrentTime = _markInPosition.Value;
+                                Debug.WriteLine($"Looping back to Mark In: {_markInPosition.Value:hh\\:mm\\:ss}");
+                            }
+                            else if (currentPosition < _markInPosition.Value)
+                            {
+                                // If somehow position is before Mark In, jump to Mark In
+                                audioFileReader.CurrentTime = _markInPosition.Value;
+                            }
+                        }
+                        // Handle only Mark Out set: loop to beginning if mark out reached
+                        else if (!_markInPosition.HasValue && _markOutPosition.HasValue)
+                        {
+                            if (currentPosition >= _markOutPosition.Value)
+                            {
+                                audioFileReader.CurrentTime = TimeSpan.Zero;
+                                Debug.WriteLine("Mark Out reached, looping to beginning");
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -851,804 +1556,6 @@ namespace MediaViewer
         #endregion
 
 
-        #region Playback Rate
-
-        private async void PlaybackRate_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is RadioMenuFlyoutItem menuItem && menuItem.Tag is string rateString)
-            {
-                if (float.TryParse(rateString, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out float newRate))
-                {
-                    playbackRate = newRate;
-                    await ApplyPlaybackRateAsync(); // Make it async
-                }
-            }
-        }
-
-        private async Task ApplyPlaybackRateAsync()
-        {
-            if (audioFileReader == null || Player == null)
-            {
-                return;
-            }
-
-            try
-            {
-                Debug.WriteLine($"Applying playback rate: {playbackRate}x");
-
-                bool wasPlaying = Player.PlaybackState == PlaybackState.Playing;
-                TimeSpan currentPos = audioFileReader.CurrentTime;
-
-                // Stop and tear down the current player so we can re-init cleanly
-                Player.PlaybackStopped -= Player_PlaybackStopped;
-                try
-                {
-                    Player.Stop();
-                }
-                catch (Exception stopEx)
-                {
-                    Debug.WriteLine($"Error stopping player before rate change: {stopEx.Message}");
-                }
-                Player.Dispose();
-                Player = null;
-
-                await Task.Delay(80); // allow buffers to release
-
-                // Rebuild the chain with the new rate
-                BuildAudioChain();
-
-                // Recreate player and re-subscribe
-                Player = new WaveOutEvent();
-                Player.PlaybackStopped += Player_PlaybackStopped;
-                Player.Init(finalSampleProvider);
-
-                // Restore position
-                audioFileReader.CurrentTime = currentPos;
-
-                if (wasPlaying)
-                {
-                    Player.Play();
-                    isPlaying = true;
-                    ProgressTimer.Start();
-                }
-                else
-                {
-                    isPlaying = false;
-                    ProgressTimer.Stop();
-                }
-
-                Debug.WriteLine($"Playback rate changed to {playbackRate}x - Success");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error applying playback rate: {ex.Message}");
-                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
-
-                try
-                {
-                    if (Player != null)
-                    {
-                        Player.PlaybackStopped -= Player_PlaybackStopped;
-                        Player.Dispose();
-                        Player = null;
-                    }
-
-                    await Task.Delay(100);
-
-                    InitializeAudioPlayer();
-
-                    if (audioFileReader != null)
-                    {
-                        BuildAudioChain();
-                        Player.Init(finalSampleProvider);
-                    }
-                }
-                catch (Exception recoveryEx)
-                {
-                    Debug.WriteLine($"Failed to recover from playback rate error: {recoveryEx.Message}");
-                    await ErrorBox.Show(recoveryEx, Title: "Playback Rate Error");
-                }
-            }
-        }
-
-        #endregion
-
-        #region Repeat Delay
-
-        private void RepeatDelaySlider_Loaded(object sender, RoutedEventArgs e)
-        {
-            repeatDelaySliderCache = sender as Slider;
-
-            if (repeatDelaySliderCache != null)
-            {
-                // Load saved delay value
-                repeatDelaySeconds = Settings.Current.RepeatDelaySeconds;
-                repeatDelaySliderCache.Value = repeatDelaySeconds;
-
-                // Update the display text
-                UpdateRepeatDelayText(repeatDelaySeconds);
-            }
-        }
-
-        private void RepeatDelaySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            repeatDelaySeconds = e.NewValue;
-
-            // Save to settings
-            Settings.Current.RepeatDelaySeconds = repeatDelaySeconds;
-
-            // Update the display text
-            UpdateRepeatDelayText(e.NewValue);
-        }
-
-        private void UpdateRepeatDelayText(double value)
-        {
-            // Find the text block - cache it if we haven't already
-            if (repeatDelaySliderCache != null && repeatDelaySliderCache.Parent is StackPanel sliderPanel)
-            {
-                // Navigate to find the RepeatDelayText TextBlock
-                DependencyObject parent = sliderPanel;
-                while (parent != null)
-                {
-                    parent = VisualTreeHelper.GetParent(parent);
-                    if (parent is StackPanel stackPanel)
-                    {
-                        var textBlock = stackPanel.FindName("RepeatDelayText") as TextBlock;
-                        if (textBlock != null)
-                        {
-                            textBlock.Text = value == 0 ? "Off" : $"{value:F1}s";
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        #endregion
-
-        #region Transport Controls
-
-        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Player == null || audioFileReader == null)
-                return;
-
-            if (Player.PlaybackState == PlaybackState.Playing)
-            {
-                Player.Pause();
-                isPlaying = false;
-                ProgressTimer.Stop();
-                UpdatePlayPauseButton(false);
-
-                if (currentItem != null)
-                {
-                    currentItem.IsPlaying = false;
-                }
-            }
-            else
-            {
-                // Check if we're at the end or if the player is in a stopped state
-                if (audioFileReader.Position >= audioFileReader.Length || Player.PlaybackState == PlaybackState.Stopped)
-                {
-                    // Reset position to beginning
-                    audioFileReader.Position = 0;
-
-                    // Reinitialize the player if it's stopped (not just paused)
-                    if (Player.PlaybackState == PlaybackState.Stopped)
-                    {
-                        try
-                        {
-                            Player.Init(finalSampleProvider);
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"Error reinitializing player: {ex.Message}");
-                            return;
-                        }
-                    }
-                }
-
-                Player.Play();
-                isPlaying = true;
-                ProgressTimer.Start();
-                UpdatePlayPauseButton(true);
-
-                if (currentItem != null)
-                {
-                    currentItem.IsPlaying = true;
-                }
-            }
-        }
-        private async void NextButton_Click(object sender, RoutedEventArgs e)
-        {
-            await PlayNext();
-        }
-
-        private async void PrevButton_Click(object sender, RoutedEventArgs e)
-        {
-            await PlayPrevious();
-        }
-
-        private async Task PlayNext()
-        {
-            if (currentItem == null || playlist.Count == 0) return;
-
-            if (isShuffleEnabled)
-            {
-                // Shuffle mode
-                currentShuffleIndex++;
-
-                if (currentShuffleIndex >= shuffleIndices.Count)
-                {
-                    if (Settings.Current.RepeatMode == RepeatMode.RepeatAll)
-                    {
-                        GenerateShuffleOrder(); // Regenerate for new shuffle order
-                    }
-                    else
-                    {
-                        if (Player != null)
-                        {
-                            Player.Stop();
-                        }
-                        if (audioFileReader != null)
-                        {
-                            audioFileReader.Position = 0;
-                        }
-                        isPlaying = false;
-                        UpdatePlayPauseButton(false);
-                        return;
-                    }
-                }
-
-                int nextIndex = shuffleIndices[currentShuffleIndex];
-                await PlayItem(playlist[nextIndex]);
-            }
-            else
-            {
-                // Normal sequential mode
-                int currentIndex = playlist.IndexOf(currentItem);
-                int nextIndex = (currentIndex + 1) % playlist.Count;
-
-                if (nextIndex == 0 && Settings.Current.RepeatMode != RepeatMode.RepeatAll)
-                {
-                    if (Player != null)
-                    {
-                        Player.Stop();
-                    }
-                    if (audioFileReader != null)
-                    {
-                        audioFileReader.Position = 0;
-                    }
-                    isPlaying = false;
-                    UpdatePlayPauseButton(false);
-                    return;
-                }
-
-                await PlayItem(playlist[nextIndex]);
-            }
-        }
-
-        private async Task PlayPrevious()
-        {
-            if (currentItem == null || playlist.Count == 0) return;
-
-            // If more than 3 seconds into the song, restart it
-            if (audioFileReader != null && audioFileReader.CurrentTime.TotalSeconds > 3)
-            {
-                audioFileReader.CurrentTime = TimeSpan.Zero;
-                return;
-            }
-
-            if (isShuffleEnabled)
-            {
-                // Shuffle mode - go to previous in shuffle order
-                currentShuffleIndex--;
-
-                if (currentShuffleIndex < 0)
-                {
-                    currentShuffleIndex = shuffleIndices.Count - 1;
-                }
-
-                int prevIndex = shuffleIndices[currentShuffleIndex];
-                await PlayItem(playlist[prevIndex]);
-            }
-            else
-            {
-                // Normal sequential mode
-                int currentIndex = playlist.IndexOf(currentItem);
-                int prevIndex = currentIndex - 1;
-                if (prevIndex < 0) prevIndex = playlist.Count - 1;
-
-                await PlayItem(playlist[prevIndex]);
-            }
-        }
-
-        private void RepeatButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (Settings.Current == null) return;
-
-            Settings.Current.RepeatMode = Settings.Current.RepeatMode switch
-            {
-                RepeatMode.Off => RepeatMode.RepeatOne,
-                RepeatMode.RepeatOne => RepeatMode.RepeatAll,
-                RepeatMode.RepeatAll => RepeatMode.Off,
-                _ => RepeatMode.Off
-            };
-
-            UpdateRepeatButton();
-        }
-
-        private void UpdateRepeatButton()
-        {
-            if (RepeatButton == null || Settings.Current == null) return;
-
-            var icon = RepeatButton.Content as FontIcon;
-            if (icon != null)
-            {
-                icon.Glyph = Settings.Current.RepeatMode switch
-                {
-                    RepeatMode.RepeatOne => "\uE8ED",
-                    RepeatMode.RepeatAll => "\uE8EE",
-                    _ => "\uF5E7"
-                };
-            }
-        }
-
-        private void ShuffleButton_Click(object sender, RoutedEventArgs e)
-        {
-            isShuffleEnabled = !isShuffleEnabled;
-            UpdateShuffleButton();
-
-            if (isShuffleEnabled)
-            {
-                // Generate shuffle order
-                GenerateShuffleOrder();
-            }
-        }
-
-        private void UpdateShuffleButton()
-        {
-            if (ShuffleButton == null) return;
-
-            var icon = ShuffleButton.Content as FontIcon;
-            if (icon != null)
-            {
-                icon.Foreground = isShuffleEnabled
-                    ? new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue)
-                    : new SolidColorBrush(Microsoft.UI.Colors.White);
-            }
-        }
-
-        private void GenerateShuffleOrder()
-        {
-            if (playlist.Count == 0) return;
-
-            shuffleIndices.Clear();
-
-            // Create list of all indices except current
-            int currentIndex = currentItem != null ? playlist.IndexOf(currentItem) : 0;
-            for (int i = 0; i < playlist.Count; i++)
-            {
-                if (i != currentIndex)
-                {
-                    shuffleIndices.Add(i);
-                }
-            }
-
-            // Shuffle using Fisher-Yates algorithm
-            var random = new Random();
-            for (int i = shuffleIndices.Count - 1; i > 0; i--)
-            {
-                int j = random.Next(i + 1);
-                (shuffleIndices[i], shuffleIndices[j]) = (shuffleIndices[j], shuffleIndices[i]);
-            }
-
-            // Add current song at the beginning
-            shuffleIndices.Insert(0, currentIndex);
-            currentShuffleIndex = 0;
-        }
-
-        private string FormatTime(TimeSpan time)
-        {
-            if (time.TotalHours >= 1)
-            {
-                return time.ToString(@"h\:mm\:ss");
-            }
-            return time.ToString(@"m\:ss");
-        }
-
-        #endregion
-
-
-        #region Volume Control
-
-        private void VolumeFlyout_Opening(object sender, object e)
-        {
-            // Find controls within the flyout
-            var flyout = sender as Flyout;
-            if (flyout?.Content is StackPanel panel)
-            {
-                var slider = panel.FindName("VolumeSlider") as Slider;
-                var percentText = panel.FindName("VolumePercentText") as TextBlock;
-                var muteButton = panel.FindName("MuteButton") as Button;
-
-                if (slider != null)
-                {
-                    slider.Value = lastVolume * 100;
-                }
-
-                if (percentText != null)
-                {
-                    percentText.Text = $"{(int)(lastVolume * 100)}%";
-                }
-            }
-        }
-
-        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            double volume = e.NewValue / 100.0;
-            lastVolume = volume;
-
-            if (volumeProvider != null)
-            {
-                volumeProvider.Volume = (float)volume;
-            }
-
-            // Update volume percentage text by finding it in the flyout
-            if (sender is Slider slider && slider.Parent is Grid grid && grid.Parent is StackPanel panel)
-            {
-                var percentText = panel.FindName("VolumePercentText") as TextBlock;
-                if (percentText != null)
-                {
-                    percentText.Text = $"{(int)e.NewValue}%";
-                }
-            }
-
-            // Update volume button icon based on level
-            UpdateVolumeIcon(volume);
-
-            // If volume is restored from 0, unmute
-            if (isMuted && volume > 0)
-            {
-                isMuted = false;
-                UpdateMuteButton(sender);
-            }
-        }
-
-        private void MuteButton_Click(object sender, RoutedEventArgs e)
-        {
-            // Find the slider in the flyout
-            if (sender is Button button && button.Parent is StackPanel panel)
-            {
-                var slider = panel.FindName("VolumeSlider") as Slider;
-
-                if (isMuted)
-                {
-                    // Unmute
-                    if (volumeProvider != null)
-                    {
-                        volumeProvider.Volume = (float)lastVolume;
-                    }
-                    if (slider != null)
-                    {
-                        slider.Value = lastVolume * 100;
-                    }
-                    isMuted = false;
-                }
-                else
-                {
-                    // Mute
-                    lastVolume = volumeProvider?.Volume ?? 1.0f;
-                    if (volumeProvider != null)
-                    {
-                        volumeProvider.Volume = 0;
-                    }
-                    if (slider != null)
-                    {
-                        slider.Value = 0;
-                    }
-                    isMuted = true;
-                }
-
-                UpdateMuteButton(sender);
-            }
-        }
-
-        private void UpdateVolumeIcon(double volume)
-        {
-            var icon = VolumeButton.Content as FontIcon;
-            if (icon != null)
-            {
-                if (volume == 0)
-                {
-                    icon.Glyph = "\uE74F"; // Mute icon
-                }
-                else if (volume < 0.33)
-                {
-                    icon.Glyph = "\uE992"; // Low volume
-                }
-                else if (volume < 0.66)
-                {
-                    icon.Glyph = "\uE993"; // Medium volume
-                }
-                else
-                {
-                    icon.Glyph = "\uE995"; // High volume
-                }
-            }
-        }
-
-        private void UpdateMuteButton(object controlInFlyout)
-        {
-            // Navigate up to find the StackPanel, then find the button
-            DependencyObject current = controlInFlyout as DependencyObject;
-            StackPanel panel = null;
-
-            while (current != null)
-            {
-                if (current is StackPanel sp)
-                {
-                    panel = sp;
-                    break;
-                }
-                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
-            }
-
-            if (panel != null)
-            {
-                var muteButton = panel.FindName("MuteButton") as Button;
-                if (muteButton?.Content is StackPanel buttonPanel)
-                {
-                    var muteIcon = buttonPanel.FindName("MuteIcon") as FontIcon;
-                    var muteText = buttonPanel.FindName("MuteText") as TextBlock;
-
-                    if (muteIcon != null && muteText != null)
-                    {
-                        if (isMuted)
-                        {
-                            muteIcon.Glyph = "\uE767"; // Unmute icon
-                            muteText.Text = "Unmute";
-                        }
-                        else
-                        {
-                            muteIcon.Glyph = "\uE74F"; // Mute icon
-                            muteText.Text = "Mute";
-                        }
-                    }
-                }
-            }
-        }
-
-        #endregion
-
-
-        #region Audio Effects
-
-        private void ReverbEnabledToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (sender is ToggleSwitch toggle)
-            {
-                isReverbEnabled = toggle.IsOn;
-
-                // Auto-disable isolation if reverb is enabled (they conflict)
-                if (isReverbEnabled && isIsolationEnabled)
-                {
-                    isIsolationEnabled = false;
-
-                    // Update the cached toggle if it exists
-                    if (isolationToggleCache != null)
-                    {
-                        isolationToggleCache.IsOn = false;
-                    }
-                }
-
-                // Update slider state
-                UpdateReverbSliderState();
-
-                ApplyReverbEffect();
-            }
-        }
-
-        private void ReverbAmountSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            reverbAmount = e.NewValue;
-            if (reverbProvider != null && isReverbEnabled)
-            {
-                // Convert 0-100 slider value to 0.0-1.0 range
-                reverbProvider.ReverbAmount = (float)(reverbAmount / 100.0);
-
-                // Also update the wet mix for more dramatic effect at higher values
-                // This makes the reverb more noticeable as you increase the slider
-                reverbProvider.WetMix = Math.Clamp((float)(reverbAmount / 100.0) * 0.6f, 0f, 0.6f);
-            }
-        }
-
-        private void ApplyReverbEffect()
-        {
-            if (audioFileReader == null || Player == null) return;
-
-            try
-            {
-                // Save current playback state
-                var wasPlaying = Player.PlaybackState == PlaybackState.Playing;
-                var currentPos = audioFileReader.CurrentTime;
-
-                // CRITICAL: Properly dispose and recreate WaveOutEvent to avoid buffer issues
-                Player.PlaybackStopped -= Player_PlaybackStopped;
-                Player.Stop();
-                Player.Dispose();
-
-                // Wait for buffers to clear
-                System.Threading.Thread.Sleep(50);
-
-                // Reset audio file reader position
-                audioFileReader.Position = 0;
-
-                // Rebuild the audio chain with/without reverb
-                BuildAudioChain();
-
-                // Recreate the wave player
-                Player = new WaveOutEvent();
-                Player.PlaybackStopped += Player_PlaybackStopped;
-
-                // Initialize with the new chain
-                Player.Init(finalSampleProvider);
-
-                // Restore position
-                audioFileReader.CurrentTime = currentPos;
-
-                // Resume playback if it was playing
-                if (wasPlaying)
-                {
-                    Player.Play();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error applying reverb effect: {ex.Message}");
-        
-                // Attempt recovery
-                try
-                {
-                    if (Player != null)
-                    {
-                        Player.Dispose();
-                    }
-                    InitializeAudioPlayer();
-            
-                    if (audioFileReader != null)
-                    {
-                        BuildAudioChain();
-                        Player.Init(finalSampleProvider);
-                    }
-                }
-                catch (Exception recoveryEx)
-                {
-                    Debug.WriteLine($"Failed to recover from reverb effect error: {recoveryEx.Message}");
-                }
-            }
-        }
-
-        private void IsolationEnabledToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (sender is ToggleSwitch toggle)
-            {
-                isIsolationEnabled = toggle.IsOn;
-
-                // Auto-disable reverb if isolation is enabled (they conflict)
-                if (isIsolationEnabled && isReverbEnabled)
-                {
-                    isReverbEnabled = false;
-
-                    // Update the cached toggle if it exists
-                    if (reverbToggleCache != null)
-                    {
-                        reverbToggleCache.IsOn = false;
-                    }
-                }
-
-                // Update slider state
-                UpdateReverbSliderState();
-
-                ApplyIsolationEffect();
-            }
-        }
-
-        private void ApplyIsolationEffect()
-        {
-            if (audioFileReader == null || Player == null) return;
-
-            try
-            {
-                // Save current playback state
-                var wasPlaying = Player.PlaybackState == PlaybackState.Playing;
-                var currentPos = audioFileReader.CurrentTime;
-
-                // CRITICAL: Properly dispose and recreate WaveOutEvent to avoid buffer issues
-                Player.PlaybackStopped -= Player_PlaybackStopped;
-                Player.Stop();
-                Player.Dispose();
-
-                // Wait for buffers to clear
-                System.Threading.Thread.Sleep(50);
-
-                // Reset audio file reader position
-                audioFileReader.Position = 0;
-
-                // Rebuild the audio chain with/without isolation
-                BuildAudioChain();
-
-                // Recreate the wave player
-                Player = new WaveOutEvent();
-                Player.PlaybackStopped += Player_PlaybackStopped;
-
-                // Initialize with the new chain
-                Player.Init(finalSampleProvider);
-
-                // Restore position
-                audioFileReader.CurrentTime = currentPos;
-
-                // Resume playback if it was playing
-                if (wasPlaying)
-                {
-                    Player.Play();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error applying isolation effect: {ex.Message}");
-        
-                // Attempt recovery
-                try
-                {
-                    if (Player != null)
-                    {
-                        Player.Dispose();
-                    }
-                    InitializeAudioPlayer();
-            
-                    if (audioFileReader != null)
-                    {
-                        BuildAudioChain();
-                        Player.Init(finalSampleProvider);
-                    }
-                }
-                catch (Exception recoveryEx)
-                {
-                    Debug.WriteLine($"Failed to recover from isolation effect error: {recoveryEx.Message}");
-                }
-            }
-        }
-
-        private void UpdateReverbSliderState()
-        {
-            // Update the reverb slider enabled state if it exists in cache
-            if (reverbSliderCache != null)
-            {
-                // Disable reverb slider when isolation is enabled OR when reverb toggle is off
-                reverbSliderCache.IsEnabled = !isIsolationEnabled && isReverbEnabled;
-            }
-        }
-
-        private void ReverbEnabledToggle_Loaded(object sender, RoutedEventArgs e)
-        {
-            reverbToggleCache = sender as ToggleSwitch;
-        }
-
-        private void IsolationEnabledToggle_Loaded(object sender, RoutedEventArgs e)
-        {
-            isolationToggleCache = sender as ToggleSwitch;
-        }
-
-        private void ReverbAmountSlider_Loaded(object sender, RoutedEventArgs e)
-        {
-            reverbSliderCache = sender as Slider;
-            // Update initial state
-            UpdateReverbSliderState();
-        }
-
-        #endregion
 
 
         #region Album Artwork
@@ -1816,7 +1723,276 @@ namespace MediaViewer
         #endregion
 
 
-        #region Metadata Saving
+        #region Lyrics
+
+        private void LyricsRichEditBox_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            if (sender is RichEditBox box && !isUpdatingUI && currentMediaProperties != null)
+            {
+                box.TextChanged -= LyricsRichEditBox_TextChanged;
+                box.Document.SetText(TextSetOptions.None, string.Empty);
+
+                if (!string.IsNullOrEmpty(currentMediaProperties.Lyrics))
+                {
+                    box.Document.SetText(TextSetOptions.None, currentMediaProperties.Lyrics);
+                }
+
+                box.TextChanged += LyricsRichEditBox_TextChanged;
+            }
+        }
+
+        private void LyricsRichEditBox_TextChanged(object sender, RoutedEventArgs e)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+
+            if (sender is RichEditBox box)
+            {
+                box.Document.GetText(Microsoft.UI.Text.TextGetOptions.AdjustCrlf, out string value);
+                currentMediaProperties.Lyrics = value;
+                MarkMetadataChanged();
+            }
+        }
+
+        private void ClearLyricsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (currentMediaProperties == null) return;
+
+            // Clear the lyrics in the UI
+            LyricsRichEditBox.Document.SetText(TextSetOptions.None, string.Empty);
+
+            // Set to empty string (not null) to ensure it's saved as cleared
+            currentMediaProperties.Lyrics = string.Empty;
+
+            MarkMetadataChanged();
+        }
+
+        private async void SearchLyricsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (currentMediaProperties == null) return;
+
+            string artist = currentMediaProperties.Author ?? "unknown";
+            string title = currentMediaProperties.Title ?? currentItem?.File.DisplayName ?? "unknown";
+
+            // Build search URL for Genius lyrics
+            string searchQuery = $"{artist} {title} lyrics";
+            string url = $"https://www.google.com/search?q={Uri.EscapeDataString(searchQuery)}";
+
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+        }
+
+        #endregion
+
+
+        #region Properties
+
+
+        private void UpdatePropertiesUI()
+        {
+            if (currentMediaProperties == null) return;
+
+            isUpdatingUI = true;
+
+            try
+            {
+                // Update editable fields
+                TitleTextBox.Text = currentMediaProperties.Title ?? string.Empty;
+                ArtistTextBox.Text = currentMediaProperties.Author ?? string.Empty;
+
+                // Album and Genre
+                AlbumTextBox.Text = currentMediaProperties.Album ?? string.Empty;
+                GenreTextBox.Text = currentMediaProperties.Genre ?? string.Empty;
+
+                // Year and Track
+                YearNumberBox.Value = currentMediaProperties.Year.HasValue ? currentMediaProperties.Year.Value : double.NaN;
+                TrackNumberBox.Value = currentMediaProperties.Track.HasValue ? currentMediaProperties.Track.Value : double.NaN;
+
+                // Comments
+                if (!string.IsNullOrEmpty(currentMediaProperties.Comments))
+                {
+                    CommentsRichEditBox.Document.SetText(TextSetOptions.None, currentMediaProperties.Comments);
+                }
+                else
+                {
+                    CommentsRichEditBox.Document.SetText(TextSetOptions.None, string.Empty);
+                }
+
+                // Rating - convert from 0-99 scale to 1-5 stars
+                if (currentMediaProperties.Rating.HasValue)
+                {
+                    uint rating = currentMediaProperties.Rating.Value;
+                    if (rating == 0) FileRatingControl.Value = -1;
+                    else if (rating >= 1 && rating <= 12) FileRatingControl.Value = 1;
+                    else if (rating >= 13 && rating <= 37) FileRatingControl.Value = 2;
+                    else if (rating >= 38 && rating <= 62) FileRatingControl.Value = 3;
+                    else if (rating >= 63 && rating <= 87) FileRatingControl.Value = 4;
+                    else if (rating >= 88) FileRatingControl.Value = 5;
+                }
+                else
+                {
+                    FileRatingControl.Value = -1;
+                }
+
+                // Update read-only file information
+                FilePathText.Text = currentMediaProperties.Path ?? string.Empty;
+                FileSizeText.Text = currentMediaProperties.Size ?? string.Empty;
+                BitRateText.Text = currentMediaProperties.BitDepth ?? string.Empty;
+                SampleRateText.Text = currentMediaProperties.DPI ?? string.Empty;
+
+                // Update duration from current item or audio file
+                if (currentItem != null && !string.IsNullOrEmpty(currentItem.DisplayDuration) && currentItem.DisplayDuration != "00:00")
+                {
+                    DurationText.Text = currentItem.DisplayDuration;
+                }
+                else if (totalDuration.TotalSeconds > 0)
+                {
+                    DurationText.Text = FormatTime(totalDuration);
+                }
+                else
+                {
+                    DurationText.Text = "--:--";
+                }
+
+                // Update lyrics
+                if (!string.IsNullOrEmpty(currentMediaProperties.Lyrics))
+                {
+                    LyricsRichEditBox.Document.SetText(TextSetOptions.None, currentMediaProperties.Lyrics);
+                }
+                else
+                {
+                    LyricsRichEditBox.Document.SetText(TextSetOptions.None, string.Empty);
+                }
+            }
+            finally
+            {
+                isUpdatingUI = false;
+            }
+        }
+
+        private void MetaTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+            currentMediaProperties.Title = TitleTextBox.Text;
+            currentMediaProperties.Author = ArtistTextBox.Text;
+            currentMediaProperties.Album = AlbumTextBox.Text;
+            currentMediaProperties.Genre = GenreTextBox.Text;
+
+            // Find which item owns the current properties being edited
+            var editedItem = playlist.FirstOrDefault(i => i.Properties == currentMediaProperties);
+
+            // Update the item's display
+            if (editedItem != null)
+            {
+                editedItem.RefreshDisplay();
+
+                // If this is also the currently playing item, update transport
+                if (editedItem == currentItem)
+                {
+                    TransportTitle.Text = $"{editedItem.DisplayArtist} - {editedItem.DisplayTitle}";
+                    App.Current.ActiveWindow.Title = TransportTitle.Text;
+                }
+            }
+
+            MarkMetadataChanged();
+        }
+
+        private void YearNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+            if (!double.IsNaN(sender.Value))
+            {
+                currentMediaProperties.Year = (uint)sender.Value;
+            }               
+            else
+            {
+                currentMediaProperties.Year = null;
+            }
+            MarkMetadataChanged();
+        }
+
+        private void TrackNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+            if (!double.IsNaN(sender.Value))
+            {
+                currentMediaProperties.Track = (uint)sender.Value;
+            }
+            else
+            {
+                currentMediaProperties.Track = null;
+            }
+            MarkMetadataChanged();
+        }
+
+        private void CommentsRichEditBox_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            if (sender is RichEditBox box && !isUpdatingUI)
+            {
+                box.TextChanged -= CommentsRichEditBox_TextChanged;
+                box.Document.SetText(TextSetOptions.None, string.Empty);
+
+                if (currentMediaProperties?.Comments != null)
+                {
+                    box.Document.SetText(TextSetOptions.None, currentMediaProperties.Comments);
+                }
+
+                box.TextChanged += CommentsRichEditBox_TextChanged;
+            }
+        }
+
+        private void CommentsRichEditBox_TextChanged(object sender, RoutedEventArgs e)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+
+            if (sender is RichEditBox box)
+            {
+                box.Document.GetText(Microsoft.UI.Text.TextGetOptions.AdjustCrlf, out string value);
+                currentMediaProperties.Comments = value;
+                MarkMetadataChanged();
+            }
+        }
+
+        private void FileRatingControl_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            if (sender is RatingControl rater && !isUpdatingUI)
+            {
+                rater.ValueChanged -= FileRatingControl_ValueChanged;
+                rater.Value = -1;
+
+                if (currentMediaProperties?.Rating != null)
+                {
+                    uint rating = currentMediaProperties.Rating.Value;
+                    if (rating == 0) rater.Value = -1;
+                    else if (rating >= 1 && rating <= 12) rater.Value = 1;
+                    else if (rating >= 13 && rating <= 37) rater.Value = 2;
+                    else if (rating >= 38 && rating <= 62) rater.Value = 3;
+                    else if (rating >= 63 && rating <= 87) rater.Value = 4;
+                    else if (rating >= 88) rater.Value = 5;
+                }
+
+                rater.ValueChanged += FileRatingControl_ValueChanged;
+            }
+        }
+
+        private void FileRatingControl_ValueChanged(RatingControl sender, object args)
+        {
+            if (isUpdatingUI || currentMediaProperties == null) return;
+
+            // Convert 1-5 star rating to 0-99 scale
+            if (sender.Value == -1) currentMediaProperties.Rating = 0;
+            else if (sender.Value == 1) currentMediaProperties.Rating = 12;
+            else if (sender.Value == 2) currentMediaProperties.Rating = 13;
+            else if (sender.Value == 3) currentMediaProperties.Rating = 38;
+            else if (sender.Value == 4) currentMediaProperties.Rating = 63;
+            else if (sender.Value == 5) currentMediaProperties.Rating = 88;
+
+            MarkMetadataChanged();
+        }
+
+
+        #endregion
+
+
+        #region Metadata
 
         private void MarkMetadataChanged()
         {
@@ -2275,7 +2451,7 @@ namespace MediaViewer
                     Debug.WriteLine($"  This is the current item in UI");
                 }
 
-                // Reload player only if this was the currently playing track
+                // Reload player only if we were editing the currently playing track
                 if (needsPlayerReload)
                 {
                     Debug.WriteLine($"  Reloading player");
@@ -2306,594 +2482,420 @@ namespace MediaViewer
             }
         }
 
-        #endregion
-
-
-        #region Metadata Event Handlers
-
-        private void UpdatePropertiesUI()
-        {
-            if (currentMediaProperties == null) return;
-
-            isUpdatingUI = true;
-
-            try
-            {
-                // Update editable fields
-                TitleTextBox.Text = currentMediaProperties.Title ?? string.Empty;
-                ArtistTextBox.Text = currentMediaProperties.Author ?? string.Empty;
-
-                // Album and Genre
-                AlbumTextBox.Text = currentMediaProperties.Album ?? string.Empty;
-                GenreTextBox.Text = currentMediaProperties.Genre ?? string.Empty;
-
-                // Year and Track
-                YearNumberBox.Value = currentMediaProperties.Year.HasValue ? currentMediaProperties.Year.Value : double.NaN;
-                TrackNumberBox.Value = currentMediaProperties.Track.HasValue ? currentMediaProperties.Track.Value : double.NaN;
-
-                // Comments
-                if (!string.IsNullOrEmpty(currentMediaProperties.Comments))
-                {
-                    CommentsRichEditBox.Document.SetText(Microsoft.UI.Text.TextSetOptions.None, currentMediaProperties.Comments);
-                }
-                else
-                {
-                    CommentsRichEditBox.Document.SetText(Microsoft.UI.Text.TextSetOptions.None, string.Empty);
-                }
-
-                // Rating - convert from 0-99 scale to 1-5 stars
-                if (currentMediaProperties.Rating.HasValue)
-                {
-                    uint rating = currentMediaProperties.Rating.Value;
-                    if (rating == 0) FileRatingControl.Value = -1;
-                    else if (rating >= 1 && rating <= 12) FileRatingControl.Value = 1;
-                    else if (rating >= 13 && rating <= 37) FileRatingControl.Value = 2;
-                    else if (rating >= 38 && rating <= 62) FileRatingControl.Value = 3;
-                    else if (rating >= 63 && rating <= 87) FileRatingControl.Value = 4;
-                    else if (rating >= 88) FileRatingControl.Value = 5;
-                }
-                else
-                {
-                    FileRatingControl.Value = -1;
-                }
-
-                // Update read-only file information
-                FilePathText.Text = currentMediaProperties.Path ?? string.Empty;
-                FileSizeText.Text = currentMediaProperties.Size ?? string.Empty;
-                BitRateText.Text = currentMediaProperties.BitDepth ?? string.Empty;
-                SampleRateText.Text = currentMediaProperties.DPI ?? string.Empty;
-
-                // Update duration from current item or audio file
-                if (currentItem != null && !string.IsNullOrEmpty(currentItem.DisplayDuration) && currentItem.DisplayDuration != "00:00")
-                {
-                    DurationText.Text = currentItem.DisplayDuration;
-                }
-                else if (totalDuration.TotalSeconds > 0)
-                {
-                    DurationText.Text = FormatTime(totalDuration);
-                }
-                else
-                {
-                    DurationText.Text = "--:--";
-                }
-
-                // Update lyrics
-                if (!string.IsNullOrEmpty(currentMediaProperties.Lyrics))
-                {
-                    LyricsRichEditBox.Document.SetText(TextSetOptions.None, currentMediaProperties.Lyrics);
-                }
-                else
-                {
-                    LyricsRichEditBox.Document.SetText(TextSetOptions.None, string.Empty);
-                }
-            }
-            finally
-            {
-                isUpdatingUI = false;
-            }
-        }
-
-        private void MetaTextBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-            currentMediaProperties.Title = TitleTextBox.Text;
-            currentMediaProperties.Author = ArtistTextBox.Text;
-            currentMediaProperties.Album = AlbumTextBox.Text;
-            currentMediaProperties.Genre = GenreTextBox.Text;
-
-            // Find which item owns the current properties being edited
-            var editedItem = playlist.FirstOrDefault(i => i.Properties == currentMediaProperties);
-
-            // Update the item's display
-            if (editedItem != null)
-            {
-                editedItem.RefreshDisplay();
-
-                // If this is also the currently playing item, update transport
-                if (editedItem == currentItem)
-                {
-                    TransportTitle.Text = $"{editedItem.DisplayArtist} - {editedItem.DisplayTitle}";
-                    App.Current.ActiveWindow.Title = TransportTitle.Text;
-                }
-            }
-
-            MarkMetadataChanged();
-        }
-
-        private void YearNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-            if (!double.IsNaN(sender.Value))
-            {
-                currentMediaProperties.Year = (uint)sender.Value;
-            }               
-            else
-            {
-                currentMediaProperties.Year = null;
-            }
-            MarkMetadataChanged();
-        }
-
-        private void TrackNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-            if (!double.IsNaN(sender.Value))
-            {
-                currentMediaProperties.Track = (uint)sender.Value;
-            }
-            else
-            {
-                currentMediaProperties.Track = null;
-            }
-            MarkMetadataChanged();
-        }
-
-        private void CommentsRichEditBox_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
-        {
-            if (sender is RichEditBox box && !isUpdatingUI)
-            {
-                box.TextChanged -= CommentsRichEditBox_TextChanged;
-                box.Document.SetText(TextSetOptions.None, string.Empty);
-
-                if (currentMediaProperties?.Comments != null)
-                {
-                    box.Document.SetText(TextSetOptions.None, currentMediaProperties.Comments);
-                }
-
-                box.TextChanged += CommentsRichEditBox_TextChanged;
-            }
-        }
-
-        private void CommentsRichEditBox_TextChanged(object sender, RoutedEventArgs e)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-
-            if (sender is RichEditBox box)
-            {
-                box.Document.GetText(Microsoft.UI.Text.TextGetOptions.AdjustCrlf, out string value);
-                currentMediaProperties.Comments = value;
-                MarkMetadataChanged();
-            }
-        }
-
-        private void FileRatingControl_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
-        {
-            if (sender is RatingControl rater && !isUpdatingUI)
-            {
-                rater.ValueChanged -= FileRatingControl_ValueChanged;
-                rater.Value = -1;
-
-                if (currentMediaProperties?.Rating != null)
-                {
-                    uint rating = currentMediaProperties.Rating.Value;
-                    if (rating == 0) rater.Value = -1;
-                    else if (rating >= 1 && rating <= 12) rater.Value = 1;
-                    else if (rating >= 13 && rating <= 37) rater.Value = 2;
-                    else if (rating >= 38 && rating <= 62) rater.Value = 3;
-                    else if (rating >= 63 && rating <= 87) rater.Value = 4;
-                    else if (rating >= 88) rater.Value = 5;
-                }
-
-                rater.ValueChanged += FileRatingControl_ValueChanged;
-            }
-        }
-
-        private void FileRatingControl_ValueChanged(RatingControl sender, object args)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-
-            // Convert 1-5 star rating to 0-99 scale
-            if (sender.Value == -1) currentMediaProperties.Rating = 0;
-            else if (sender.Value == 1) currentMediaProperties.Rating = 12;
-            else if (sender.Value == 2) currentMediaProperties.Rating = 13;
-            else if (sender.Value == 3) currentMediaProperties.Rating = 38;
-            else if (sender.Value == 4) currentMediaProperties.Rating = 63;
-            else if (sender.Value == 5) currentMediaProperties.Rating = 88;
-
-            MarkMetadataChanged();
-        }
 
         #endregion
 
 
-        #region Lyrics Editing
+        #region Transport Controls
 
-        private void LyricsRichEditBox_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is RichEditBox box && !isUpdatingUI && currentMediaProperties != null)
-            {
-                box.TextChanged -= LyricsRichEditBox_TextChanged;
-                box.Document.SetText(TextSetOptions.None, string.Empty);
-
-                if (!string.IsNullOrEmpty(currentMediaProperties.Lyrics))
-                {
-                    box.Document.SetText(TextSetOptions.None, currentMediaProperties.Lyrics);
-                }
-
-                box.TextChanged += LyricsRichEditBox_TextChanged;
-            }
-        }
-
-        private void LyricsRichEditBox_TextChanged(object sender, RoutedEventArgs e)
-        {
-            if (isUpdatingUI || currentMediaProperties == null) return;
-
-            if (sender is RichEditBox box)
-            {
-                box.Document.GetText(Microsoft.UI.Text.TextGetOptions.AdjustCrlf, out string value);
-                currentMediaProperties.Lyrics = value;
-                MarkMetadataChanged();
-            }
-        }
-
-        private void ClearLyricsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (currentMediaProperties == null) return;
-
-            // Clear the lyrics in the UI
-            LyricsRichEditBox.Document.SetText(TextSetOptions.None, string.Empty);
-
-            // Set to empty string (not null) to ensure it's saved as cleared
-            currentMediaProperties.Lyrics = string.Empty;
-
-            MarkMetadataChanged();
-        }
-
-        private async void SearchLyricsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (currentMediaProperties == null) return;
-
-            string artist = currentMediaProperties.Author ?? "unknown";
-            string title = currentMediaProperties.Title ?? currentItem?.File.DisplayName ?? "unknown";
-
-            // Build search URL for Genius lyrics
-            string searchQuery = $"{artist} {title} lyrics";
-            string url = $"https://www.google.com/search?q={Uri.EscapeDataString(searchQuery)}";
-
-            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
-        }
-
-        #endregion
-
-
-        #region View Management
-
-        private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            bool shouldBeNarrow = e.NewSize.Width < 800;
-            bool shouldTransportBeNarrow = e.NewSize.Width < 600;
-
-            if (shouldBeNarrow != isNarrowView)
-            {
-                isNarrowView = shouldBeNarrow;
-
-                if (isNarrowView)
-                {
-                    SetupNarrowView();
-                }
-                else
-                {
-                    SetupWideView();
-                }
-            }
-
-            if (shouldTransportBeNarrow != isTransportNarrow)
-            {
-                isTransportNarrow = shouldTransportBeNarrow;
-
-                if (isTransportNarrow)
-                {
-                    SetupNarrowTransport();
-                }
-                else
-                {
-                    SetupWideTransport();
-                }
-            }
-        }
-
-        private void SetupWideView()
-        {
-            // Show both views side by side
-            ViewToggleButtons.Visibility = Visibility.Collapsed;
-            ContentSplitter.Visibility = Visibility.Visible;
-
-            PlaylistView.Visibility = Visibility.Visible;
-            MetaDataView.Visibility = Visibility.Visible;
-
-            PlaylistView.SetValue(Grid.ColumnProperty, 0);
-            PlaylistView.ClearValue(Grid.ColumnSpanProperty);
-            MetaDataView.SetValue(Grid.ColumnProperty, 1);
-            MetaDataView.ClearValue(Grid.ColumnSpanProperty);
-
-            PlaylistColumn.Width = GridLength.Auto;
-            AlbumArtColumn.Width = new GridLength(1, GridUnitType.Star);
-        }
-
-        private void SetupNarrowView()
-        {
-            // Show toggle buttons and current view
-            ViewToggleButtons.Visibility = Visibility.Visible;
-            ContentSplitter.Visibility = Visibility.Collapsed;
-
-            UpdateNarrowView();
-        }
-
-        private void SetupWideTransport()
-        {
-            // Wide transport: Single row with 3 columns
-            TransportGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-            TransportGrid.RowDefinitions[1].Height = new GridLength(0);
-
-            LeftControls.SetValue(Grid.RowProperty, 0);
-            LeftControls.SetValue(Grid.ColumnProperty, 0);
-            LeftControls.ClearValue(Grid.ColumnSpanProperty);
-            LeftControls.HorizontalAlignment = HorizontalAlignment.Left;
-
-            CenterControls.SetValue(Grid.RowProperty, 0);
-            CenterControls.SetValue(Grid.ColumnProperty, 1);
-            CenterControls.SetValue(Grid.ColumnSpanProperty, 1);
-
-            RightControls.SetValue(Grid.RowProperty, 0);
-            RightControls.SetValue(Grid.ColumnProperty, 2);
-            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
-            RightControls.Visibility = Visibility.Visible;
-            RightControls.Spacing = 12;
-
-            // Remove any additional stack panels created for narrow view
-            var extraStackPanels = TransportGrid.Children.OfType<StackPanel>()
-                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
-                .ToList();
-            foreach (var sp in extraStackPanels)
-            {
-                // Remove buttons from the extra panel before removing the panel
-                sp.Children.Clear();
-                TransportGrid.Children.Remove(sp);
-            }
-
-            // Clear and restore original button order for wide view
-            RightControls.Children.Clear();
-            RightControls.Children.Add(RepeatButton);
-            RightControls.Children.Add(ShuffleButton);
-            RightControls.Children.Add(VolumeButton);
-            RightControls.Children.Add(MoreButton);
-
-            TransportTitle.Visibility = Visibility.Visible;
-            ProgressGrid.Margin = new Thickness(0);
-        }
-
-        private void SetupNarrowTransport()
-        {
-            // Narrow transport: 2 rows
-            // Row 0: Timeline spanning full width
-            // Row 1: [Shuffle, Repeat] - [Prev, Play, Next] - [Volume, More]
-            TransportGrid.RowDefinitions[0].Height = GridLength.Auto;
-            TransportGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
-
-            // Timeline at top spanning all columns
-            CenterControls.SetValue(Grid.RowProperty, 0);
-            CenterControls.SetValue(Grid.ColumnProperty, 0);
-            CenterControls.SetValue(Grid.ColumnSpanProperty, 3);
-
-            // Play controls at bottom center
-            LeftControls.SetValue(Grid.RowProperty, 1);
-            LeftControls.SetValue(Grid.ColumnProperty, 1);
-            LeftControls.ClearValue(Grid.ColumnSpanProperty);
-            LeftControls.HorizontalAlignment = HorizontalAlignment.Center;
-
-            // Right controls split: Shuffle & Repeat on left, Volume & More on right
-            RightControls.SetValue(Grid.RowProperty, 1);
-            RightControls.SetValue(Grid.ColumnProperty, 0);
-            RightControls.ClearValue(Grid.ColumnSpanProperty);
-            RightControls.HorizontalAlignment = HorizontalAlignment.Right;
-            RightControls.Visibility = Visibility.Visible;
-            RightControls.Spacing = 8;
-
-            // Remove any existing extra stack panels before creating new one
-            var existingExtraPanels = TransportGrid.Children.OfType<StackPanel>()
-                .Where(sp => sp != LeftControls && sp != CenterControls && sp != RightControls)
-                .ToList();
-            foreach (var panel in existingExtraPanels)
-            {
-                panel.Children.Clear();
-                TransportGrid.Children.Remove(panel);
-            }
-
-            // Reorder buttons: Shuffle, Repeat on left side
-            RightControls.Children.Clear();
-            RightControls.Children.Add(ShuffleButton);
-            RightControls.Children.Add(RepeatButton);
-
-            // Create a new stack for Volume and More on the right side
-            var rightSideControls = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                Spacing = 8
-            };
-            rightSideControls.Children.Add(VolumeButton);
-            rightSideControls.Children.Add(MoreButton);
-            rightSideControls.SetValue(Grid.RowProperty, 1);
-            rightSideControls.SetValue(Grid.ColumnProperty, 2);
-
-            TransportGrid.Children.Add(rightSideControls);
-
-            TransportTitle.Visibility = Visibility.Collapsed;
-            ProgressGrid.Margin = new Thickness(0);
-        }
-
-        private void ShowPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (isNarrowView)
-            {
-                ShowAlbumArtButton.IsChecked = false;
-                ShowPlaylistButton.IsChecked = true;
-                UpdateNarrowView();
-            }
-        }
-
-        private void ShowAlbumArtButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (isNarrowView)
-            {
-                ShowPlaylistButton.IsChecked = false;
-                ShowAlbumArtButton.IsChecked = true;
-                UpdateNarrowView();
-            }
-        }
-
-        private void UpdateNarrowView()
-        {
-            if (ShowPlaylistButton.IsChecked == true)
-            {
-                // Show playlist only
-                PlaylistView.Visibility = Visibility.Visible;
-                MetaDataView.Visibility = Visibility.Collapsed;
-                PlaylistView.SetValue(Grid.ColumnProperty, 0);
-                PlaylistView.SetValue(Grid.ColumnSpanProperty, 2);
-                PlaylistColumn.Width = new GridLength(1, GridUnitType.Star);
-                AlbumArtColumn.Width = new GridLength(0);
-            }
-            else
-            {
-                // Show album art only
-                PlaylistView.Visibility = Visibility.Collapsed;
-                MetaDataView.Visibility = Visibility.Visible;
-                MetaDataView.SetValue(Grid.ColumnProperty, 0);
-                MetaDataView.SetValue(Grid.ColumnSpanProperty, 2);
-                PlaylistColumn.Width = new GridLength(0);
-                AlbumArtColumn.Width = new GridLength(1, GridUnitType.Star);
-            }
-        }
-
-        #endregion
-
-
-        #region Playlist UI
-
-        private async void PlayTrackButton_Click(object sender, RoutedEventArgs e)
-        {
-            // Prevent playing different tracks while in multi-select mode
-            if (isMultiSelectMode)
-            {
+            if (Player == null || audioFileReader == null)
                 return;
-            }
 
-            if (sender is Button button && button.Tag is AudioPlaylistItem item)
+            if (Player.PlaybackState == PlaybackState.Playing)
             {
-                // If clicking the currently playing item, toggle play/pause
-                if (item == currentItem && item.IsPlaying)
+                Player.Pause();
+                isPlaying = false;
+                ProgressTimer.Stop();
+                UpdatePlayPauseButton(false);
+
+                if (currentItem != null)
                 {
-                    // Item is currently playing, so pause it
-                    if (Player != null && Player.PlaybackState == PlaybackState.Playing)
+                    currentItem.IsPlaying = false;
+                }
+            }
+            else
+            {
+                // Check if we're at the end or if the player is in a stopped state
+                if (audioFileReader.Position >= audioFileReader.Length || Player.PlaybackState == PlaybackState.Stopped)
+                {
+                    // Reset position to beginning
+                    audioFileReader.Position = 0;
+
+                    // Reinitialize the player if it's stopped (not just paused)
+                    if (Player.PlaybackState == PlaybackState.Stopped)
                     {
-                        Player.Pause();
-                        isPlaying = false;
-                        ProgressTimer.Stop();
-                        UpdatePlayPauseButton(false);
-                        item.IsPlaying = false;
+                        try
+                        {
+                            Player.Init(finalSampleProvider);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error reinitializing player: {ex.Message}");
+                            return;
+                        }
+                    }
+                }
+
+                Player.Play();
+                isPlaying = true;
+                ProgressTimer.Start();
+                UpdatePlayPauseButton(true);
+
+                if ( currentItem != null)
+                {
+                    currentItem.IsPlaying = true;
+                }
+            }
+        }
+
+        private async void NextButton_Click(object sender, RoutedEventArgs e)
+        {
+            await PlayNext();
+        }
+
+        private async void PrevButton_Click(object sender, RoutedEventArgs e)
+        {
+            await PlayPrevious();
+        }
+
+        private async Task PlayNext()
+        {
+            if (currentItem == null || playlist.Count == 0) return;
+
+            if (isShuffleEnabled)
+            {
+                // Shuffle mode
+                currentShuffleIndex++;
+
+                if (currentShuffleIndex >= shuffleIndices.Count)
+                {
+                    if (Settings.Current.RepeatMode == RepeatMode.RepeatAll)
+                    {
+                        GenerateShuffleOrder(); // Regenerate for new shuffle order
                     }
                     else
                     {
-                        // Resume playback
-                        Player?.Play();
-                        isPlaying = true;
-                        ProgressTimer.Start();
-                        UpdatePlayPauseButton(true);
-                        item.IsPlaying = true;
+                        if (Player != null)
+                        {
+                            Player.Stop();
+                        }
+                        if (audioFileReader != null)
+                        {
+                            audioFileReader.Position = 0;
+                        }
+                        isPlaying = false;
+                        UpdatePlayPauseButton(false);
+                        return;
                     }
                 }
-                else
+
+                int nextIndex = shuffleIndices[currentShuffleIndex];
+                await PlayItem(playlist[nextIndex]);
+            }
+            else
+            {
+                // Normal sequential mode
+                int currentIndex = playlist.IndexOf(currentItem);
+                int nextIndex = (currentIndex + 1) % playlist.Count;
+
+                if (nextIndex == 0 && Settings.Current.RepeatMode != RepeatMode.RepeatAll)
                 {
-                    // Update selected item flag for all items
-                    foreach (var playlistItem in playlist)
+                    if (Player != null)
                     {
-                        playlistItem.IsSelected = playlistItem == item;
+                        Player.Stop();
                     }
-
-                    // Update ListView selection to match
-                    FileList.SelectedItem = item;
-
-                    // Update metadata UI and album art for the new selection
-                    currentMediaProperties = item.Properties;
-                    UpdatePropertiesUI();
-                    await LoadAlbumArt(item.File);
-
-                    // Play the selected item
-                    await PlayItem(item);
+                    if (audioFileReader != null)
+                    {
+                        audioFileReader.Position = 0;
+                    }
+                    isPlaying = false;
+                    UpdatePlayPauseButton(false);
+                    return;
                 }
+
+                await PlayItem(playlist[nextIndex]);
             }
         }
 
-        private async void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async Task PlayPrevious()
         {
-            // Prevent changing selection while in multi-select mode
-            if (isMultiSelectMode)
+            if (currentItem == null || playlist.Count == 0) return;
+
+            // If more than 3 seconds into the song, restart it
+            if (audioFileReader != null && audioFileReader.CurrentTime.TotalSeconds > 3)
             {
-                // Restore the current item as selected in single-select terms
-                // but don't interfere with multi-select checkboxes
+                audioFileReader.CurrentTime = TimeSpan.Zero;
                 return;
             }
 
-            if (FileList.SelectedItem is AudioPlaylistItem item)
+            if (isShuffleEnabled)
             {
-                // Update selected item flag for all items
-                foreach (var playlistItem in playlist)
+                // Shuffle mode - go to previous in shuffle order
+                currentShuffleIndex--;
+
+                if (currentShuffleIndex < 0)
                 {
-                    playlistItem.IsSelected = playlistItem == item;
+                    currentShuffleIndex = shuffleIndices.Count - 1;
                 }
 
-                // Update metadata UI without changing playback
-                currentMediaProperties = item.Properties;
-                UpdatePropertiesUI();
+                int prevIndex = shuffleIndices[currentShuffleIndex];
+                await PlayItem(playlist[prevIndex]);
+            }
+            else
+            {
+                // Normal sequential mode
+                int currentIndex = playlist.IndexOf(currentItem);
+                int prevIndex = currentIndex - 1;
+                if (prevIndex < 0) prevIndex = playlist.Count - 1;
 
-                // Load and display album art for the selected item
-                await LoadAlbumArt(item.File);
+                await PlayItem(playlist[prevIndex]);
             }
         }
 
-        private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        private void RepeatButton_Click(object sender, RoutedEventArgs e)
         {
-            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
-            {
-                string searchText = sender.Text.ToLowerInvariant();
+            if (Settings.Current == null) return;
 
-                if (string.IsNullOrWhiteSpace(searchText))
+            Settings.Current.RepeatMode = Settings.Current.RepeatMode switch
+            {
+                RepeatMode.Off => RepeatMode.RepeatOne,
+                RepeatMode.RepeatOne => RepeatMode.RepeatAll,
+                RepeatMode.RepeatAll => RepeatMode.Off,
+                _ => RepeatMode.Off
+            };
+
+            UpdateRepeatButton();
+        }
+
+        private void UpdateRepeatButton()
+        {
+            if (RepeatButton == null || Settings.Current == null) return;
+
+            var icon = RepeatButton.Content as FontIcon;
+            if (icon != null)
+            {
+                icon.Glyph = Settings.Current.RepeatMode switch
                 {
-                    // Show all items
-                    FileList.ItemsSource = playlist;
+                    RepeatMode.RepeatOne => "\uE8ED",
+                    RepeatMode.RepeatAll => "\uE8EE",
+                    _ => "\uF5E7"
+                };
+            }
+        }
+
+        private void ShuffleButton_Click(object sender, RoutedEventArgs e)
+        {
+            isShuffleEnabled = !isShuffleEnabled;
+            UpdateShuffleButton();
+
+            if (isShuffleEnabled)
+            {
+                // Generate shuffle order
+                GenerateShuffleOrder();
+            }
+        }
+
+        private void UpdateShuffleButton()
+        {
+            if (ShuffleButton == null) return;
+
+            var icon = ShuffleButton.Content as FontIcon;
+            if (icon != null)
+            {
+                icon.Foreground = isShuffleEnabled
+                    ? new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue)
+                    : new SolidColorBrush(Microsoft.UI.Colors.White);
+            }
+        }
+
+        private void GenerateShuffleOrder()
+        {
+            if (playlist.Count == 0) return;
+
+            shuffleIndices.Clear();
+
+            // Create list of all indices except current
+            int currentIndex = currentItem != null ? playlist.IndexOf(currentItem) : 0;
+            for (int i = 0; i < playlist.Count; i++)
+            {
+                if (i != currentIndex)
+                {
+                    shuffleIndices.Add(i);
+                }
+            }
+
+            // Shuffle using Fisher-Yates algorithm
+            var random = new Random();
+            for (int i = shuffleIndices.Count - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (shuffleIndices[i], shuffleIndices[j]) = (shuffleIndices[j], shuffleIndices[i]);
+            }
+
+            // Add current song at the beginning
+            shuffleIndices.Insert(0, currentIndex);
+            currentShuffleIndex = 0;
+        }
+
+        private string FormatTime(TimeSpan time)
+        {
+            if (time.TotalHours >= 1)
+            {
+                return time.ToString(@"h\:mm\:ss");
+            }
+            return time.ToString(@"m\:ss");
+        }
+
+        #endregion
+
+
+        #region Volume Control
+
+        private void VolumeFlyout_Opening(object sender, object e)
+        {
+            // Find controls within the flyout
+            var flyout = sender as Flyout;
+            if (flyout?.Content is StackPanel panel)
+            {
+                var slider = panel.FindName("VolumeSlider") as Slider;
+                var percentText = panel.FindName("VolumePercentText") as TextBlock;
+                var muteButton = panel.FindName("MuteButton") as Button;
+
+                if (slider != null)
+                {
+                    slider.Value = lastVolume * 100;
+                }
+
+                if (percentText != null)
+                {
+                    percentText.Text = $"{(int)(lastVolume * 100)}%";
+                }
+            }
+        }
+
+        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            double volume = e.NewValue / 100.0;
+            lastVolume = volume;
+
+            if (volumeProvider != null)
+            {
+                volumeProvider.Volume = (float)volume;
+            }
+
+            // Update volume percentage text by finding it in the flyout
+            if (sender is Slider slider && slider.Parent is Grid grid && grid.Parent is StackPanel panel)
+            {
+                var percentText = panel.FindName("VolumePercentText") as TextBlock;
+                if (percentText != null)
+                {
+                    percentText.Text = $"{(int)e.NewValue}%";
+                }
+            }
+
+            // Update volume button icon based on level
+            UpdateVolumeIcon(volume);
+
+            // If volume is restored from 0, unmute
+            if (isMuted && volume > 0)
+            {
+                isMuted = false;
+                UpdateMuteButton(sender);
+            }
+        }
+
+        private void MuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Find the slider in the flyout
+            if (sender is Button button && button.Parent is StackPanel panel)
+            {
+                var slider = panel.FindName("VolumeSlider") as Slider;
+
+                if (isMuted)
+                {
+                    // Unmute
+                    if (volumeProvider != null)
+                    {
+                        volumeProvider.Volume = (float)lastVolume;
+                    }
+                    if (slider != null)
+                    {
+                        slider.Value = lastVolume * 100;
+                    }
+                    isMuted = false;
                 }
                 else
                 {
-                    // Filter playlist
-                    var filtered = playlist.Where(item =>
-                        item.DisplayTitle.ToLowerInvariant().Contains(searchText) ||
-                        item.DisplayArtist.ToLowerInvariant().Contains(searchText) ||
-                        (item.Properties.Album?.ToLowerInvariant().Contains(searchText) ?? false)
-                    ).ToList();
+                    // Mute
+                    lastVolume = volumeProvider?.Volume ?? 1.0f;
+                    if (volumeProvider != null)
+                    {
+                        volumeProvider.Volume = 0;
+                    }
+                    if (slider != null)
+                    {
+                        slider.Value = 0;
+                    }
+                    isMuted = true;
+                }
 
-                    FileList.ItemsSource = filtered;
+                UpdateMuteButton(sender);
+            }
+        }
+
+        private void UpdateVolumeIcon(double volume)
+        {
+            var icon = VolumeButton.Content as FontIcon;
+            if (icon != null)
+            {
+                if (volume == 0)
+                {
+                    icon.Glyph = "\uE74F"; // Mute icon
+                }
+                else if (volume < 0.33)
+                {
+                    icon.Glyph = "\uE992"; // Low volume
+                }
+                else if (volume < 0.66)
+                {
+                    icon.Glyph = "\uE993"; // Medium volume
+                }
+                else
+                {
+                    icon.Glyph = "\uE995"; // High volume
+                }
+            }
+        }
+
+        private void UpdateMuteButton(object controlInFlyout)
+        {
+            // Navigate up to find the StackPanel, then find the button
+            DependencyObject current = controlInFlyout as DependencyObject;
+            StackPanel panel = null;
+
+            while (current != null)
+            {
+                if (current is StackPanel sp)
+                {
+                    panel = sp;
+                    break;
+                }
+                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            if (panel != null)
+            {
+                var muteButton = panel.FindName("MuteButton") as Button;
+                if (muteButton?.Content is StackPanel buttonPanel)
+                {
+                    var muteIcon = buttonPanel.FindName("MuteIcon") as FontIcon;
+                    var muteText = buttonPanel.FindName("MuteText") as TextBlock;
+
+                    if (muteIcon != null && muteText != null)
+                    {
+                        if (isMuted)
+                        {
+                            muteIcon.Glyph = "\uE767"; // Unmute icon
+                            muteText.Text = "Unmute";
+                        }
+                        else
+                        {
+                            muteIcon.Glyph = "\uE74F"; // Mute icon
+                            muteText.Text = "Mute";
+                        }
+                    }
                 }
             }
         }
@@ -2901,6 +2903,385 @@ namespace MediaViewer
         #endregion
 
 
+        #region Playback Rate
+
+        private async void PlaybackRate_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is RadioMenuFlyoutItem menuItem && menuItem.Tag is string rateString)
+            {
+                if (float.TryParse(rateString, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float newRate))
+                {
+                    playbackRate = newRate;
+                    await ApplyPlaybackRateAsync(); // Make it async
+                }
+            }
+        }
+
+        private async Task ApplyPlaybackRateAsync()
+        {
+            if (audioFileReader == null || Player == null)
+            {
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine($"Applying playback rate: {playbackRate}x");
+
+                bool wasPlaying = Player.PlaybackState == PlaybackState.Playing;
+                TimeSpan currentPos = audioFileReader.CurrentTime;
+
+                // Stop and tear down the current player so we can reinit cleanly
+                Player.PlaybackStopped -= Player_PlaybackStopped;
+                Player.Stop();
+                Player.Dispose();
+
+                // Wait for buffers to clear
+                System.Threading.Thread.Sleep(50);
+
+                // Reset audio file reader position
+                audioFileReader.Position = 0;
+
+                // Rebuild the chain with the new rate
+                BuildAudioChain();
+
+                // Recreate player and re-subscribe
+                Player = new WaveOutEvent();
+                Player.PlaybackStopped += Player_PlaybackStopped;
+                Player.Init(finalSampleProvider);
+
+                // Restore position
+                audioFileReader.CurrentTime = currentPos;
+
+                if (wasPlaying)
+                {
+                    Player.Play();
+                    isPlaying = true;
+                    ProgressTimer.Start();
+                }
+                else
+                {
+                    isPlaying = false;
+                    ProgressTimer.Stop();
+                }
+
+                Debug.WriteLine($"Playback rate changed to {playbackRate}x - Success");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error applying playback rate: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+
+                try
+                {
+                    if (Player != null)
+                    {
+                        Player.PlaybackStopped -= Player_PlaybackStopped;
+                        Player.Dispose();
+                        Player = null;
+                    }
+
+                    await Task.Delay(100);
+
+                    InitializeAudioPlayer();
+
+                    if (audioFileReader != null)
+                    {
+                        BuildAudioChain();
+                        Player.Init(finalSampleProvider);
+                    }
+                }
+                catch (Exception recoveryEx)
+                {
+                    Debug.WriteLine($"Failed to recover from playback rate error: {recoveryEx.Message}");
+                    await ErrorBox.Show(recoveryEx, Title: "Playback Rate Error");
+                }
+            }
+        }
+
+        #endregion
+
+
+        #region Repeat Delay
+
+        private void RepeatDelaySlider_Loaded(object sender, RoutedEventArgs e)
+        {
+            repeatDelaySliderCache = sender as Slider;
+
+            if (repeatDelaySliderCache != null)
+            {
+                // Load saved delay value
+                repeatDelaySeconds = Settings.Current.RepeatDelaySeconds;
+                repeatDelaySliderCache.Value = repeatDelaySeconds;
+
+                // Update the display text
+                UpdateRepeatDelayText(repeatDelaySeconds);
+            }
+        }
+
+        private void RepeatDelaySlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            repeatDelaySeconds = e.NewValue;
+
+            // Save to settings
+            Settings.Current.RepeatDelaySeconds = repeatDelaySeconds;
+
+            // Update the display text
+            UpdateRepeatDelayText(e.NewValue);
+        }
+
+        private void UpdateRepeatDelayText(double value)
+        {
+            // Find the text block - cache it if we haven't already
+            if (repeatDelaySliderCache != null && repeatDelaySliderCache.Parent is StackPanel sliderPanel)
+            {
+                // Navigate to find the RepeatDelayText TextBlock
+                DependencyObject parent = sliderPanel;
+                while (parent != null)
+                {
+                    parent = VisualTreeHelper.GetParent(parent);
+                    if (parent is StackPanel stackPanel)
+                    {
+                        var textBlock = stackPanel.FindName("RepeatDelayText") as TextBlock;
+                        if (textBlock != null)
+                        {
+                            textBlock.Text = value == 0 ? "Off" : $"{value:F1}s";
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+
+        #region Audio Effects
+
+        private void ReverbEnabledToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleSwitch toggle)
+            {
+                isReverbEnabled = toggle.IsOn;
+
+                // Auto-disable isolation if reverb is enabled (they conflict)
+                if (isReverbEnabled && isIsolationEnabled)
+                {
+                    isIsolationEnabled = false;
+
+                    // Update the cached toggle if it exists
+                    if (isolationToggleCache != null)
+                    {
+                        isolationToggleCache.IsOn = false;
+                    }
+                }
+
+                // Update slider state
+                UpdateReverbSliderState();
+
+                ApplyReverbEffect();
+            }
+        }
+
+        private void ReverbAmountSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            reverbAmount = e.NewValue;
+            if (reverbProvider != null && isReverbEnabled)
+            {
+                // Convert 0-100 slider value to 0.0-1.0 range
+                reverbProvider.ReverbAmount = (float)(reverbAmount / 100.0);
+
+                // Also update the wet mix for more dramatic effect at higher values
+                // This makes the reverb more noticeable as you increase the slider
+                reverbProvider.WetMix = Math.Clamp((float)(reverbAmount / 100.0) * 0.6f, 0f, 0.6f);
+            }
+        }
+
+        private void ApplyReverbEffect()
+        {
+            if (audioFileReader == null || Player == null) return;
+
+            try
+            {
+                // Save current playback state
+                var wasPlaying = Player.PlaybackState == PlaybackState.Playing;
+                var currentPos = audioFileReader.CurrentTime;
+
+                // CRITICAL: Properly dispose and recreate WaveOutEvent to avoid buffer issues
+                Player.PlaybackStopped -= Player_PlaybackStopped;
+                Player.Stop();
+                Player.Dispose();
+
+                // Wait for buffers to clear
+                System.Threading.Thread.Sleep(50);
+
+                // Reset audio file reader position
+                audioFileReader.Position = 0;
+
+                // Rebuild the audio chain with the new rate
+                BuildAudioChain();
+
+                // Recreate player and re-subscribe
+                Player = new WaveOutEvent();
+                Player.PlaybackStopped += Player_PlaybackStopped;
+                Player.Init(finalSampleProvider);
+
+                // Restore position
+                audioFileReader.CurrentTime = currentPos;
+
+                // Resume playback if it was playing
+                if (wasPlaying)
+                {
+                    Player.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error applying reverb effect: {ex.Message}");
+
+                // Attempt recovery
+                try
+                {
+                    if (Player != null)
+                    {
+                        Player.Dispose();
+                    }
+                    InitializeAudioPlayer();
+
+                    if (audioFileReader != null)
+                    {
+                        BuildAudioChain();
+                        Player.Init(finalSampleProvider);
+                    }
+                }
+                catch (Exception recoveryEx)
+                {
+                    Debug.WriteLine($"Failed to recover from reverb effect error: {recoveryEx.Message}");
+                }
+            }
+        }
+
+
+        private void IsolationEnabledToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleSwitch toggle)
+            {
+                isIsolationEnabled = toggle.IsOn;
+
+                // Auto-disable reverb if isolation is enabled (they conflict)
+                if (isIsolationEnabled && isReverbEnabled)
+                {
+                    isReverbEnabled = false;
+
+                    // Update the cached toggle if it exists
+                    if (reverbToggleCache != null)
+                    {
+                        reverbToggleCache.IsOn = false;
+                    }
+                }
+
+                // Update slider state
+                UpdateReverbSliderState();
+
+                ApplyIsolationEffect();
+            }
+        }
+
+        private void ApplyIsolationEffect()
+        {
+            if (audioFileReader == null || Player == null) return;
+
+            try
+            {
+                // Save current playback state
+                var wasPlaying = Player.PlaybackState == PlaybackState.Playing;
+                var currentPos = audioFileReader.CurrentTime;
+
+                // CRITICAL: Properly dispose and recreate WaveOutEvent to avoid buffer issues
+                Player.PlaybackStopped -= Player_PlaybackStopped;
+                Player.Stop();
+                Player.Dispose();
+
+                // Wait for buffers to clear
+                System.Threading.Thread.Sleep(50);
+
+                // Reset audio file reader position
+                audioFileReader.Position = 0;
+
+                // Rebuild the audio chain with/without isolation
+                BuildAudioChain();
+
+                // Recreate the wave player
+                Player = new WaveOutEvent();
+                Player.PlaybackStopped += Player_PlaybackStopped;
+
+                // Initialize with the new chain
+                Player.Init(finalSampleProvider);
+
+                // Restore position
+                audioFileReader.CurrentTime = currentPos;
+
+                // Resume playback if it was playing
+                if (wasPlaying)
+                {
+                    Player.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error applying isolation effect: {ex.Message}");
+
+                // Attempt recovery
+                try
+                {
+                    if (Player != null)
+                    {
+                        Player.Dispose();
+                    }
+                    InitializeAudioPlayer();
+
+                    if (audioFileReader != null)
+                    {
+                        BuildAudioChain();
+                        Player.Init(finalSampleProvider);
+                    }
+                }
+                catch (Exception recoveryEx)
+                {
+                    Debug.WriteLine($"Failed to recover from isolation effect error: {recoveryEx.Message}");
+                }
+            }
+        }
+
+        private void UpdateReverbSliderState()
+        {
+            // Update the reverb slider enabled state if it exists in cache
+            if (reverbSliderCache != null)
+            {
+                // Disable reverb slider when isolation is enabled OR when reverb toggle is off
+                reverbSliderCache.IsEnabled = !isIsolationEnabled && isReverbEnabled;
+            }
+        }
+
+        private void ReverbEnabledToggle_Loaded(object sender, RoutedEventArgs e)
+        {
+            reverbToggleCache = sender as ToggleSwitch;
+        }
+
+        private void IsolationEnabledToggle_Loaded(object sender, RoutedEventArgs e)
+        {
+            isolationToggleCache = sender as ToggleSwitch;
+        }
+
+        private void ReverbAmountSlider_Loaded(object sender, RoutedEventArgs e)
+        {
+            reverbSliderCache = sender as Slider;
+            // Update initial state
+            UpdateReverbSliderState();
+        }
+
+        #endregion
 
     }
 

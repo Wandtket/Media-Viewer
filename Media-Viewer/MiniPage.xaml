@@ -9,6 +9,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     SizeChanged="Page_SizeChanged"
+    CharacterReceived="Page_CharacterReceived"
     MinWidth="300"
     mc:Ignorable="d">
 
@@ -750,12 +751,22 @@
                                             VerticalAlignment="Center" 
                                             FontSize="12" />
 
-                                <Slider x:Name="ProgressSlider" 
-                                        ValueChanged="ProgressSlider_ValueChanged"
-                                        Grid.Column="1" 
-                                        Minimum="0"
-                                        Maximum="100" 
-                                        Value="0" />
+                                <Grid Grid.Column="1">
+                                    <!-- Canvas for Mark In/Out markers -->
+                                    <Canvas x:Name="MarkInOutCanvas"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Center"
+                                            Height="32"
+                                            IsHitTestVisible="False"/>
+
+                                    <!-- Progress Slider -->
+                                    <Slider x:Name="ProgressSlider" 
+                                            ValueChanged="ProgressSlider_ValueChanged"
+                                            Minimum="0"
+                                            Maximum="100" 
+                                            Value="0"
+                                            SizeChanged="ProgressSlider_SizeChanged"/>
+                                </Grid>
 
                                 <TextBlock x:Name="TotalTimeText" 
                                             Grid.Column="2"
@@ -901,6 +912,46 @@
                                         <MenuFlyoutItem Text="Show in File Explorer">
                                             <MenuFlyoutItem.Icon>
                                                 <SymbolIcon Symbol="OpenFile"/>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutSeparator/>
+                                        
+                                        <MenuFlyoutItem x:Name='MarkInButton'
+                                                        Text="Mark In"
+                                                        VerticalAlignment="Center"
+                                                        MediaTransportControlsHelper.DropoutOrder='3'
+                                                        KeyboardAcceleratorTextOverride="Press ["
+                                                        Click="MarkInButton_Click"
+                                                        Margin="0,0,0,0">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph='&#xEDE2;' RenderTransformOrigin="0.5,0.5">
+                                                    <FontIcon.RenderTransform>
+                                                        <ScaleTransform ScaleX="-1"/>
+                                                    </FontIcon.RenderTransform>
+                                                </FontIcon>
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem x:Name='MarkOutButton'
+                                                         Text="Mark Out"
+                                                         VerticalAlignment="Center"
+                                                         MediaTransportControlsHelper.DropoutOrder='3'
+                                                         KeyboardAcceleratorTextOverride="Press ]"
+                                                         Click="MarkOutButton_Click">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph='&#xEDE2;' />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+
+                                        <MenuFlyoutItem x:Name='ClearMarksButton'
+                                                         Text="Clear Mark In/Out"
+                                                         VerticalAlignment="Center"
+                                                         MediaTransportControlsHelper.DropoutOrder='3'
+                                                         KeyboardAcceleratorTextOverride="Press \"
+                                                         Click="ClearMarksButton_Click">
+                                            <MenuFlyoutItem.Icon>
+                                                <SymbolIcon Symbol="Clear" />
                                             </MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
 
