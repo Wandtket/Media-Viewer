@@ -193,7 +193,7 @@ public sealed partial class MediaPage : Page
                 + player.CurrentFile.FileType;
 
             ParentPage.FreeMoveButton.IsChecked = player.isFreeMove;
-            ParentPage.RotateButton.IsEnabled = player.CanRotate;
+            ParentPage.RotateButton.IsEnabled = player.canRotate;
 
             // Enable SMTC and play/resume the current player
             if (player.VideoElement.MediaPlayer != null)

@@ -76,6 +76,13 @@ namespace MediaViewer
         private StereoPanSampleProvider panProvider;
         private float stereoPan = 0.0f; // -1.0 (left) to 1.0 (right)
 
+        // 3D Spatial Audio
+        private Spatial3DAudioProvider spatialProvider;
+        private bool isSpatialAudioEnabled = false;
+        private float spatialAzimuth = 0f;    // 0-360 degrees
+        private float spatialElevation = 0f;  // -90 to 90 degrees
+        private float spatialDistance = 1f;   // 0.5 to 50 meters
+
         // Reverb effect
         private bool isReverbEnabled = false;
         private double reverbAmount = 50.0; // 0-100 scale
@@ -1049,9 +1056,27 @@ namespace MediaViewer
             }
 
             // Add stereo pan control (before effects so pan affects the effected signal)
-            panProvider = new StereoPanSampleProvider(chain);
-            panProvider.Pan = stereoPan;
-            chain = panProvider;
+            // Note: Spatial audio replaces stereo pan when enabled
+            if (isSpatialAudioEnabled)
+            {
+                spatialProvider = new Spatial3DAudioProvider(chain);
+                spatialProvider.Azimuth = spatialAzimuth;
+                spatialProvider.Elevation = spatialElevation;
+                spatialProvider.Distance = spatialDistance;
+                spatialProvider.EnableEffect = true;
+                chain = spatialProvider;
+
+                // Disable pan when spatial audio is active
+                panProvider = null;
+            }
+            else
+            {
+                panProvider = new StereoPanSampleProvider(chain);
+                panProvider.Pan = stereoPan;
+                chain = panProvider;
+
+                spatialProvider = null;
+            }
 
             if (isIsolationEnabled)
             {
@@ -1086,7 +1111,6 @@ namespace MediaViewer
 
             finalSampleProvider = chain;
         }
-
 
 
         private void StereoPanSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -3279,6 +3303,272 @@ namespace MediaViewer
             reverbSliderCache = sender as Slider;
             // Update initial state
             UpdateReverbSliderState();
+        }
+
+        #endregion
+
+
+        #region 3D Spatial Audio
+
+        private void SpatialAudioEnabledToggle_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleSwitch toggle)
+            {
+                toggle.IsOn = isSpatialAudioEnabled;
+            }
+        }
+
+        private void SpatialAudioEnabledToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleSwitch toggle)
+            {
+                isSpatialAudioEnabled = toggle.IsOn;
+                ApplySpatialAudioEffect();
+            }
+        }
+
+        private void AzimuthSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            spatialAzimuth = (float)e.NewValue;
+
+            // Update the spatial provider if it exists
+            if (spatialProvider != null && isSpatialAudioEnabled)
+            {
+                spatialProvider.Azimuth = spatialAzimuth;
+            }
+
+            // Update the display text
+            UpdateAzimuthText(e.NewValue);
+        }
+
+        private void UpdateAzimuthText(double azimuth)
+        {
+            // Find the text block by traversing the visual tree
+            if (DispatcherQueue != null)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    // Try to find the text block through the visual tree
+                    var textBlock = FindControlByName("AzimuthValueText") as TextBlock;
+                    if (textBlock != null)
+                    {
+                        string direction = azimuth switch
+                        {
+                            0 => "Front",
+                            90 => "Right",
+                            180 => "Back",
+                            270 => "Left",
+                            _ when azimuth > 0 && azimuth < 90 => "Front-Right",
+                            _ when azimuth > 90 && azimuth < 180 => "Back-Right",
+                            _ when azimuth > 180 && azimuth < 270 => "Back-Left",
+                            _ when azimuth > 270 && azimuth < 360 => "Front-Left",
+                            _ => ""
+                        };
+
+                        textBlock.Text = $"{(int)azimuth}° {direction}";
+                    }
+                });
+            }
+        }
+
+        private void ElevationSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            spatialElevation = (float)e.NewValue;
+
+            // Update the spatial provider if it exists
+            if (spatialProvider != null && isSpatialAudioEnabled)
+            {
+                spatialProvider.Elevation = spatialElevation;
+            }
+
+            // Update the display text
+            UpdateElevationText(e.NewValue);
+        }
+
+        private void UpdateElevationText(double elevation)
+        {
+            if (DispatcherQueue != null)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    var textBlock = FindControlByName("ElevationValueText") as TextBlock;
+                    if (textBlock != null)
+                    {
+                        string direction = elevation switch
+                        {
+                            0 => "Level",
+                            > 0 => "Above",
+                            < 0 => "Below"
+                        };
+
+                        textBlock.Text = $"{(int)elevation}° {direction}";
+                    }
+                });
+            }
+        }
+
+        private void DistanceSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            spatialDistance = (float)e.NewValue;
+
+            // Update the spatial provider if it exists
+            if (spatialProvider != null && isSpatialAudioEnabled)
+            {
+                spatialProvider.Distance = spatialDistance;
+            }
+
+            // Update the display text
+            UpdateDistanceText(e.NewValue);
+        }
+
+        private void UpdateDistanceText(double distance)
+        {
+            if (DispatcherQueue != null)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    var textBlock = FindControlByName("DistanceValueText") as TextBlock;
+                    if (textBlock != null)
+                    {
+                        textBlock.Text = $"{distance:F1}m";
+                    }
+                });
+            }
+        }
+
+        private void ResetSpatialButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Reset all spatial audio parameters to center
+            spatialAzimuth = 0f;
+            spatialElevation = 0f;
+            spatialDistance = 1f;
+
+            // Find and update all sliders
+            if (sender is Button button)
+            {
+                DependencyObject parent = button;
+                while (parent != null)
+                {
+                    parent = VisualTreeHelper.GetParent(parent);
+                    if (parent is StackPanel stackPanel)
+                    {
+                        // Find sliders by name
+                        var azimuthSlider = stackPanel.FindName("AzimuthSlider") as Slider;
+                        var elevationSlider = stackPanel.FindName("ElevationSlider") as Slider;
+                        var distanceSlider = stackPanel.FindName("DistanceSlider") as Slider;
+
+                        if (azimuthSlider != null) azimuthSlider.Value = 0;
+                        if (elevationSlider != null) elevationSlider.Value = 0;
+                        if (distanceSlider != null) distanceSlider.Value = 1;
+
+                        break;
+                    }
+                }
+            }
+
+            // Update the provider immediately
+            if (spatialProvider != null && isSpatialAudioEnabled)
+            {
+                spatialProvider.Azimuth = spatialAzimuth;
+                spatialProvider.Elevation = spatialElevation;
+                spatialProvider.Distance = spatialDistance;
+            }
+        }
+
+        private void ApplySpatialAudioEffect()
+        {
+            if (audioFileReader == null || Player == null) return;
+
+            try
+            {
+                // Save current playback state
+                var wasPlaying = Player.PlaybackState == PlaybackState.Playing;
+                var currentPos = audioFileReader.CurrentTime;
+
+                // CRITICAL: Properly dispose and recreate WaveOutEvent to avoid buffer issues
+                Player.PlaybackStopped -= Player_PlaybackStopped;
+                Player.Stop();
+                Player.Dispose();
+
+                // Wait for buffers to clear
+                System.Threading.Thread.Sleep(50);
+
+                // Reset audio file reader position
+                audioFileReader.Position = 0;
+
+                // Rebuild the audio chain with/without spatial audio
+                BuildAudioChain();
+
+                // Recreate the wave player
+                Player = new WaveOutEvent();
+                Player.PlaybackStopped += Player_PlaybackStopped;
+
+                // Initialize with the new chain
+                Player.Init(finalSampleProvider);
+
+                // Restore position
+                audioFileReader.CurrentTime = currentPos;
+
+                // Resume playback if it was playing
+                if (wasPlaying)
+                {
+                    Player.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error applying spatial audio effect: {ex.Message}");
+
+                // Attempt recovery
+                try
+                {
+                    if (Player != null)
+                    {
+                        Player.Dispose();
+                    }
+                    InitializeAudioPlayer();
+
+                    if (audioFileReader != null)
+                    {
+                        BuildAudioChain();
+                        Player.Init(finalSampleProvider);
+                    }
+                }
+                catch (Exception recoveryEx)
+                {
+                    Debug.WriteLine($"Failed to recover from spatial audio effect error: {recoveryEx.Message}");
+                }
+            }
+        }
+
+        // Helper method to find controls by name in the visual tree
+        private DependencyObject FindControlByName(string name)
+        {
+            return FindControlInChildren(Content, name);
+        }
+
+        private DependencyObject FindControlInChildren(DependencyObject parent, string name)
+        {
+            if (parent == null) return null;
+
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is FrameworkElement element && element.Name == name)
+                {
+                    return child;
+                }
+
+                var result = FindControlInChildren(child, name);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+
+            return null;
         }
 
         #endregion

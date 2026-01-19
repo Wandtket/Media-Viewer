@@ -1100,6 +1100,182 @@
                                             </MenuFlyoutSubItem.Items>
                                         </MenuFlyoutSubItem>
 
+                                        <MenuFlyoutSubItem Text="3D Spatial Audio">
+                                            <MenuFlyoutSubItem.Icon>
+                                                <FontIcon Glyph="&#xE706;"/>
+                                            </MenuFlyoutSubItem.Icon>
+                                            <MenuFlyoutSubItem.Items>
+                                                <MenuFlyoutItem>
+                                                    <MenuFlyoutItem.Template>
+                                                        <ControlTemplate TargetType="MenuFlyoutItem">
+                                                            <StackPanel Padding="15,15,15,5" Spacing="12" Width="260">
+                                                                <ToggleSwitch x:Name="SpatialAudioEnabledToggle"
+                                                                              OnContent="Enabled" 
+                                                                              OffContent="Enabled"
+                                                                              Header="3D Spatial Audio"
+                                                                              IsOn="False"
+                                                                              Loaded="SpatialAudioEnabledToggle_Loaded"
+                                                                              Toggled="SpatialAudioEnabledToggle_Toggled"
+                                                                              HorizontalAlignment="Left"/>
+
+                                                                <TextBlock Text="Position audio in 3D space around you"
+                                                                           FontSize="11"
+                                                                           Opacity="0.7"
+                                                                           TextWrapping="Wrap"
+                                                                           Margin="0,0,0,5"/>
+
+                                                                <!-- Azimuth Control -->
+                                                                <StackPanel Spacing="5">
+                                                                    <TextBlock Text="Azimuth (Left/Right)" 
+                                                                               FontSize="12"
+                                                                               FontWeight="SemiBold"/>
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <Slider x:Name="AzimuthSlider"
+                                                                                Grid.Column="0"
+                                                                                Minimum="0"
+                                                                                Maximum="360"
+                                                                                Value="0"
+                                                                                TickFrequency="90"
+                                                                                TickPlacement="Outside"
+                                                                                SmallChange="5"
+                                                                                LargeChange="45"
+                                                                                ValueChanged="AzimuthSlider_ValueChanged"/>
+
+                                                                        <TextBlock x:Name="AzimuthValueText"
+                                                                                   Text="0° Front" 
+                                                                                   Grid.Column="1"
+                                                                                   VerticalAlignment="Center"
+                                                                                   FontSize="12"
+                                                                                   FontWeight="SemiBold"
+                                                                                   MinWidth="80"
+                                                                                   Margin="10,0,0,0"
+                                                                                   TextAlignment="Right"/>
+                                                                    </Grid>
+                                                                    <Grid Margin="0,2,0,0">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="Front" Grid.Column="0" FontSize="10" Opacity="0.6" HorizontalAlignment="Left"/>
+                                                                        <TextBlock Text="Right" Grid.Column="1" FontSize="10" Opacity="0.6" HorizontalAlignment="Center"/>
+                                                                        <TextBlock Text="Back" Grid.Column="2" FontSize="10" Opacity="0.6" HorizontalAlignment="Center"/>
+                                                                        <TextBlock Text="Left" Grid.Column="3" FontSize="10" Opacity="0.6" HorizontalAlignment="Right"/>
+                                                                    </Grid>
+                                                                </StackPanel>
+
+                                                                <!-- Elevation Control -->
+                                                                <StackPanel Spacing="5">
+                                                                    <TextBlock Text="Elevation (Up/Down)" 
+                                                                               FontSize="12"
+                                                                               FontWeight="SemiBold"/>
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <Slider x:Name="ElevationSlider"
+                                                                                Grid.Column="0"
+                                                                                Minimum="-90"
+                                                                                Maximum="90"
+                                                                                Value="0"
+                                                                                TickFrequency="45"
+                                                                                TickPlacement="Outside"
+                                                                                SmallChange="5"
+                                                                                LargeChange="15"
+                                                                                ValueChanged="ElevationSlider_ValueChanged"/>
+
+                                                                        <TextBlock x:Name="ElevationValueText"
+                                                                                   Text="0° Level" 
+                                                                                   Grid.Column="1"
+                                                                                   VerticalAlignment="Center"
+                                                                                   FontSize="12"
+                                                                                   FontWeight="SemiBold"
+                                                                                   MinWidth="80"
+                                                                                   Margin="10,0,0,0"
+                                                                                   TextAlignment="Right"/>
+                                                                    </Grid>
+                                                                    <Grid Margin="0,2,0,0">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="Below" Grid.Column="0" FontSize="10" Opacity="0.6" HorizontalAlignment="Left"/>
+                                                                        <TextBlock Text="Level" Grid.Column="1" FontSize="10" Opacity="0.6" HorizontalAlignment="Center"/>
+                                                                        <TextBlock Text="Above" Grid.Column="2" FontSize="10" Opacity="0.6" HorizontalAlignment="Right"/>
+                                                                    </Grid>
+                                                                </StackPanel>
+
+                                                                <!-- Distance Control -->
+                                                                <StackPanel Spacing="5">
+                                                                    <TextBlock Text="Distance" 
+                                                                               FontSize="12"
+                                                                               FontWeight="SemiBold"/>
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <Slider x:Name="DistanceSlider"
+                                                                                    Grid.Column="0"
+                                                                                    Minimum="0.5"
+                                                                                    Maximum="50"
+                                                                                    Value="1"
+                                                                                    TickFrequency="10"
+                                                                                    TickPlacement="Outside"
+                                                                                    SmallChange="0.5"
+                                                                                    LargeChange="5"
+                                                                                    ValueChanged="DistanceSlider_ValueChanged"/>
+
+                                                                        <TextBlock x:Name="DistanceValueText"
+                                                                                   Text="1.0m" 
+                                                                                   Grid.Column="1"
+                                                                                   VerticalAlignment="Center"
+                                                                                   FontSize="12"
+                                                                                   FontWeight="SemiBold"
+                                                                                   MinWidth="80"
+                                                                                   Margin="10,0,0,0"
+                                                                                   TextAlignment="Right"/>
+                                                                    </Grid>
+                                                                    <Grid Margin="0,2,0,0">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="Near" Grid.Column="0" FontSize="10" Opacity="0.6" HorizontalAlignment="Left"/>
+                                                                        <TextBlock Text="Far" Grid.Column="1" FontSize="10" Opacity="0.6" HorizontalAlignment="Right"/>
+                                                                    </Grid>
+                                                                </StackPanel>
+
+                                                                <!-- Reset Button -->
+                                                                <Button x:Name="ResetSpatialButton"
+                                                                            Click="ResetSpatialButton_Click"
+                                                                            HorizontalAlignment="Stretch"
+                                                                            Margin="0,5,0,0">
+                                                                    
+                                                                    <Button.Content>
+                                                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                                                            <FontIcon Glyph="&#xE72C;" FontSize="14"/>
+                                                                            <TextBlock Text="Reset to Center"/>
+                                                                        </StackPanel>
+                                                                    </Button.Content>
+                                                                </Button>
+                                                            </StackPanel>
+                                                        </ControlTemplate>
+                                                    </MenuFlyoutItem.Template>
+                                                </MenuFlyoutItem>
+                                            </MenuFlyoutSubItem.Items>
+                                        </MenuFlyoutSubItem>
+
                                         <MenuFlyoutSubItem Text="Effects">
                                             <MenuFlyoutSubItem.Icon>
                                                 <FontIcon Glyph="&#xF4A5;"/>

@@ -630,6 +630,186 @@ namespace MediaViewer.Extensions
     }
 
 
+    /// <summary>
+    /// Simulates 3D spatial audio, making sound appear to come from any direction in space.
+    /// Uses azimuth (left-right), elevation (up-down), and distance to position audio.
+    /// Automatically converts mono sources to stereo for spatial effects.
+    /// </summary>
+    public class Spatial3DAudioProvider : ISampleProvider
+    {
+        private readonly ISampleProvider source;
+        private readonly MonoToStereoSampleProvider monoToStereo;
+        private readonly bool sourceWasMono;
+
+        // Delay lines for ITD (Interaural Time Difference)
+        private readonly float[] leftDelayBuffer;
+        private readonly float[] rightDelayBuffer;
+        private int leftDelayIndex;
+        private int rightDelayIndex;
+
+        // Low-pass filters for elevation simulation
+        private OnePoleLowPass elevationFilterL;
+        private OnePoleLowPass elevationFilterR;
+
+        // Head shadow simulation for rear sounds
+        private readonly OnePoleLowPass rearFilterL;
+        private readonly OnePoleLowPass rearFilterR;
+
+        public WaveFormat WaveFormat { get; }
+
+        /// <summary>
+        /// Azimuth angle in degrees: 0° = front, 90° = right, 180° = back, 270° = left
+        /// </summary>
+        public float Azimuth { get; set; } = 0f;
+
+        /// <summary>
+        /// Elevation angle in degrees: 0° = horizontal, 90° = above, -90° = below
+        /// </summary>
+        public float Elevation { get; set; } = 0f;
+
+        /// <summary>
+        /// Distance in meters (affects volume and filtering). Range: 0.5 to 50 meters
+        /// </summary>
+        public float Distance { get; set; } = 1f;
+
+        /// <summary>
+        /// Enable or disable the spatial effect
+        /// </summary>
+        public bool EnableEffect { get; set; } = true;
+
+        public Spatial3DAudioProvider(ISampleProvider source)
+        {
+            // Check if source is mono and convert to stereo
+            if (source.WaveFormat.Channels == 1)
+            {
+                monoToStereo = new MonoToStereoSampleProvider(source);
+                this.source = monoToStereo;
+                sourceWasMono = true;
+                WaveFormat = monoToStereo.WaveFormat;
+            }
+            else
+            {
+                this.source = source;
+                sourceWasMono = false;
+                WaveFormat = source.WaveFormat;
+            }
+
+            int sr = WaveFormat.SampleRate;
+
+            // Max ITD delay is about 0.7ms (distance between ears at speed of sound)
+            int maxDelaySamples = (int)(sr * 0.0007f);
+            leftDelayBuffer = new float[maxDelaySamples];
+            rightDelayBuffer = new float[maxDelaySamples];
+
+            // Filters for elevation and rear sound coloration
+            elevationFilterL = new OnePoleLowPass(8000, sr);
+            elevationFilterR = new OnePoleLowPass(8000, sr);
+            rearFilterL = new OnePoleLowPass(5000, sr);
+            rearFilterR = new OnePoleLowPass(5000, sr);
+        }
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            int samplesRead = source.Read(buffer, offset, count);
+
+            if (!EnableEffect || WaveFormat.Channels != 2)
+                return samplesRead;
+
+            // Clamp parameters
+            float azimuth = Azimuth % 360f;
+            if (azimuth < 0) azimuth += 360f;
+            float elevation = Math.Clamp(Elevation, -90f, 90f);
+            float distance = Math.Clamp(Distance, 0.5f, 50f);
+
+            // Convert angles to radians
+            float azimuthRad = azimuth * MathF.PI / 180f;
+            float elevationRad = elevation * MathF.PI / 180f;
+
+            // Calculate position in 3D space (spherical to Cartesian)
+            float x = distance * MathF.Cos(elevationRad) * MathF.Sin(azimuthRad);
+            float y = distance * MathF.Sin(elevationRad);
+            float z = distance * MathF.Cos(elevationRad) * MathF.Cos(azimuthRad);
+
+            // Distance attenuation (inverse square law with near-field compensation)
+            float attenuation = 1f / (1f + distance);
+
+            // Calculate ILD (Interaural Level Difference) - volume difference between ears
+            float angleFromRight = azimuthRad;
+            float leftGain = (MathF.Cos(angleFromRight) + 1f) * 0.5f; // 0 to 1
+            float rightGain = (MathF.Sin(angleFromRight) + 1f) * 0.5f; // 0 to 1
+
+            // Add head shadow effect (sounds from one side are quieter in opposite ear)
+            float shadowFactor = 0.3f;
+            leftGain = leftGain * (1f - shadowFactor) + shadowFactor;
+            rightGain = rightGain * (1f - shadowFactor) + shadowFactor;
+
+            // Calculate ITD (Interaural Time Difference) - timing difference between ears
+            float itdSamples = MathF.Sin(azimuthRad) * leftDelayBuffer.Length * 0.8f;
+            int leftDelay = Math.Max(0, (int)itdSamples);
+            int rightDelay = Math.Max(0, (int)-itdSamples);
+
+            // Determine if sound is behind listener (azimuth 90-270°)
+            bool isBehind = azimuth > 90f && azimuth < 270f;
+            float behindAmount = 0f;
+            if (isBehind)
+            {
+                // Calculate how far behind (0 at sides, 1 at directly behind)
+                behindAmount = 1f - MathF.Abs(MathF.Cos(azimuthRad));
+            }
+
+            // Elevation affects high frequencies (sounds above/below are more muffled)
+            float elevationEffect = MathF.Abs(elevationRad) / (MathF.PI * 0.5f); // 0 to 1
+            float elevationCutoff = 8000f - (elevationEffect * 4000f); // 8kHz to 4kHz
+            elevationFilterL = new OnePoleLowPass(elevationCutoff, WaveFormat.SampleRate);
+            elevationFilterR = new OnePoleLowPass(elevationCutoff, WaveFormat.SampleRate);
+
+            for (int i = 0; i < samplesRead; i += 2)
+            {
+                float inputL = buffer[offset + i];
+                float inputR = buffer[offset + i + 1];
+
+                // Convert to mono for spatial processing
+                float mono = (inputL + inputR) * 0.5f;
+
+                // Apply distance attenuation
+                mono *= attenuation;
+
+                // Apply ITD (timing difference) using delay buffers
+                leftDelayBuffer[leftDelayIndex] = mono;
+                rightDelayBuffer[rightDelayIndex] = mono;
+
+                float delayedLeft = leftDelayBuffer[(leftDelayIndex - leftDelay + leftDelayBuffer.Length) % leftDelayBuffer.Length];
+                float delayedRight = rightDelayBuffer[(rightDelayIndex - rightDelay + rightDelayBuffer.Length) % rightDelayBuffer.Length];
+
+                leftDelayIndex = (leftDelayIndex + 1) % leftDelayBuffer.Length;
+                rightDelayIndex = (rightDelayIndex + 1) % rightDelayBuffer.Length;
+
+                // Apply ILD (volume difference)
+                float outputL = delayedLeft * leftGain;
+                float outputR = delayedRight * rightGain;
+
+                // Apply elevation filtering
+                outputL = elevationFilterL.Process(outputL);
+                outputR = elevationFilterR.Process(outputR);
+
+                // Apply rear sound muffling (head shadow effect)
+                if (isBehind)
+                {
+                    outputL = rearFilterL.Process(outputL) * (1f - behindAmount) +
+                             outputL * behindAmount * 0.6f;
+                    outputR = rearFilterR.Process(outputR) * (1f - behindAmount) +
+                             outputR * behindAmount * 0.6f;
+                }
+
+                buffer[offset + i] = outputL;
+                buffer[offset + i + 1] = outputR;
+            }
+
+            return samplesRead;
+        }
+    }
+
+
     #region Reverb Building Blocks
 
     internal class DelayLine
