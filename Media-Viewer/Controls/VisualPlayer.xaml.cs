@@ -596,6 +596,11 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
+    private void ImageElement_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    {
+        App.Current.ActiveWindow.ToggleFullScreen();
+    }
+
     private async void ImageElement_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         var s = (FrameworkElement)sender;
@@ -779,7 +784,7 @@ public sealed partial class VisualPlayer : UserControl
     {
         tapCancellation?.Cancel();
 
-        ToggleFullscreen();
+        App.Current.ActiveWindow.ToggleFullScreen();
 
         e.Handled = true;
     }
@@ -836,6 +841,7 @@ public sealed partial class VisualPlayer : UserControl
 
         //Converter to Gif
         MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
+        ConvertToGifItem.Click += async (_, __) => await ConvertToGif(); 
         EditItem.Items.Add(ConvertToGifItem);
 
         EditItem.Items.Add(new MenuFlyoutSeparator());
@@ -2230,34 +2236,111 @@ public sealed partial class VisualPlayer : UserControl
     #endregion
 
 
+    #region Convert to Gif
 
-    private void ImageElement_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    private async Task ConvertToGif()
     {
-        ToggleFullscreen();
+        if (VideoElement.Visibility != Visibility.Visible || CurrentFile == null)
+        {
+            await MessageBox.Show("No video is currently loaded.", Title: "Convert to GIF");
+            return;
+        }
+
+        if (!(VideoElement.FindDescendant("VisualPlayerPresenter") is MediaPlayerPresenter presenter) ||
+            presenter.MediaPlayer == null)
+        {
+            return;
+        }
+
+        var session = presenter.MediaPlayer.PlaybackSession;
+        if (session == null) return;
+
+        // Determine start and end times
+        TimeSpan startTime = _markInPosition ?? TimeSpan.Zero;
+        TimeSpan endTime = _markOutPosition ?? session.NaturalDuration;
+
+        // Validate the range
+        if (startTime >= endTime)
+        {
+            await MessageBox.Show("Invalid time range. Mark In must be before Mark Out.", Title: "Convert to GIF");
+            return;
+        }
+
+        TimeSpan duration = endTime - startTime;
+
+        // Warn if duration is very long
+        if (duration.TotalSeconds > 30)
+        {
+            var result = await ConfirmBox.Show(
+                $"The selected section is {duration.TotalSeconds:F1} seconds long.\n\n" +
+                "Converting long videos to GIF may result in large file sizes.\n\n" +
+                "Do you want to continue?",
+                Title: "Convert to GIF",
+                primaryText: "Continue",
+                secondaryText: "Cancel");
+
+            if (result != ContentDialogResult.Primary)
+            {
+                return;
+            }
+        }
+
+        // Show file save picker
+        string baseName = Path.GetFileNameWithoutExtension(CurrentFile.Path);
+        string timestamp = startTime.ToString(@"hh\-mm\-ss");
+        string suggestedName = $"{baseName}_{timestamp}";
+
+        var picker = new FileSavePicker();
+        var hwnd = WindowNative.GetWindowHandle(App.Current.ActiveWindow);
+        InitializeWithWindow.Initialize(picker, hwnd);
+
+        picker.SuggestedStartLocation = PickerLocationId.VideosLibrary;
+        picker.SuggestedFileName = suggestedName;
+        picker.FileTypeChoices.Add("GIF Image", new List<string> { ".gif" });
+
+        var destFile = await picker.PickSaveFileAsync();
+        if (destFile == null) return; // User cancelled
+
+        try
+        {
+            // Show progress (you might want to add a progress indicator in the UI)
+            LoadRing.IsActive = true;
+
+            await Task.Run(async () =>
+            {
+                // Convert video section to GIF using FFmpeg
+                // Scale to reasonable size and optimize for file size
+                await FFMpegArguments
+                    .FromFileInput(CurrentFile.Path, false, options => options.Seek(startTime))
+                    .OutputToFile(destFile.Path, true, options => options
+                        .WithCustomArgument($"-t {duration.TotalSeconds}")
+                        .WithCustomArgument("-vf \"fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\"")
+                        .WithCustomArgument("-loop 0"))
+                    .ProcessAsynchronously();
+            });
+
+            LoadRing.IsActive = false;
+
+            // Offer to open the file
+            var openResult = await ConfirmBox.Show(
+                "GIF created successfully!\n\nWould you like to open it?",
+                Title: "Convert to GIF",
+                primaryText: "Open",
+                secondaryText: "Close");
+
+            if (openResult == ContentDialogResult.Primary)
+            {
+                await Launcher.LaunchFileAsync(destFile);
+            }
+        }
+        catch (Exception ex)
+        {
+            LoadRing.IsActive = false;
+            await ErrorBox.Show(ex, Title: "Convert to GIF Failed");
+        }
     }
 
-
-    private void ToggleFullscreen()
-    {
-        var window = App.Current.ActiveWindow;
-        if (window == null) return;
-
-        var appWindow = window.AppWindow;
-        if (appWindow == null) return;
-
-        if (appWindow.Presenter.Kind == Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen)
-        {
-            // Exit fullscreen
-            appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Default);
-        }
-        else
-        {
-            // Enter fullscreen
-            appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
-        }
-    }
-
-
+    #endregion
 
 
     private async void TransportControls_Liked(object sender, EventArgs e)
