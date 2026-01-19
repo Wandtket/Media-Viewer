@@ -298,6 +298,11 @@ namespace MediaViewer
             ResetInactivityTimer();
         }
 
+        private void HeaderGrid_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            App.Current.ActiveWindow.ToggleFullScreen();
+        }
+
         private void AutoHideUI(bool Enabled)
         {
             if (Enabled) 

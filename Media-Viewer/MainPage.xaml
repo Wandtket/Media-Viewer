@@ -88,6 +88,7 @@
                       VerticalAlignment="Top"
                       Margin="0,-1,0,0"
                       PointerMoved="HeaderGrid_PointerMoved"
+                      DoubleTapped="HeaderGrid_DoubleTapped"
                       Background="{ThemeResource CustomAcrylicBrush}">
 
                     <Grid.ColumnDefinitions>
