@@ -230,6 +230,26 @@ namespace MediaViewer.Extensions
             }
         }
 
+
+        /// <summary>
+        /// Toggles Fullscreen mode for the Window
+        /// </summary>
+        /// <param name="window"></param>
+        public static void ToggleFullScreen(this Window window)
+        {
+            var appWindow = window.GetAppWindow();
+            if (appWindow.Presenter.Kind == Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen)
+            {
+                // Exit fullscreen
+                appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Default);
+            }
+            else
+            {
+                // Enter fullscreen
+                appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
+            }
+        }
+
         #endregion
 
 
