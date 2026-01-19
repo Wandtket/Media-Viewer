@@ -56,12 +56,15 @@ public sealed partial class VisualPlayer : UserControl
     public bool MediaLoaded = false;
 
     private bool isPaused = false;
-    public bool CanRotate = true;
+    public bool canRotate = true;
     public bool isHDR = false;
 
+    private System.Threading.CancellationTokenSource tapCancellation;
+    private const int TAP_DELAY_MS = 200;
+
     public bool isFreeMove = false;
-    private bool _isSeamlessLooping = false;
-    private bool _initialMediaOpened = false;
+    private bool isSeamlessLooping = false;
+    private bool initialMediaOpened = false;
 
 
     public VisualPlayer()
@@ -129,7 +132,7 @@ public sealed partial class VisualPlayer : UserControl
         }
         ImageElement.Source = bitmap;
         LoadRing.IsActive = false;
-        CanRotate = true;
+        canRotate = true;
 
         await Task.Delay(100);
         FitContentToWidth();
@@ -148,7 +151,7 @@ public sealed partial class VisualPlayer : UserControl
 
         ImageElement.Source = GifImage;
         LoadRing.IsActive = false;
-        CanRotate = false;
+        canRotate = false;
 
         ParentPage?.ParentPage?.RotateButton.IsEnabled = false;
 
@@ -163,47 +166,32 @@ public sealed partial class VisualPlayer : UserControl
 
         VideoElement.Visibility = Visibility.Visible;
 
-        Windows.Media.Playback.MediaPlayer player = new Windows.Media.Playback.MediaPlayer();
-        
-        // For network drives and large files: Disable RealTimePlayback to allow more buffering
-        // This prevents stuttering when loading from network locations
-        player.RealTimePlayback = false;
-        
-        // Enable audio/video frame server mode for better performance with high-bitrate content
-        // This reduces latency and improves responsiveness
+        Windows.Media.Playback.MediaPlayer player = new Windows.Media.Playback.MediaPlayer();      
+        player.RealTimePlayback = false;       
         player.AudioCategory = Windows.Media.Playback.MediaPlayerAudioCategory.Movie;
         player.AudioDeviceType = Windows.Media.Playback.MediaPlayerAudioDeviceType.Multimedia;
         
-        // For seamless looping (especially for short videos), use MediaPlaybackList
-        // This enables gapless playback and eliminates stuttering at loop points
+
         if (Settings.Current.RepeatMode == RepeatMode.RepeatOne)
         {
-            _isSeamlessLooping = true;
+            isSeamlessLooping = true;
             
-            // Create MediaSource from file
-            var mediaSource = MediaSource.CreateFromStorageFile(source);
-            
-            // Create MediaPlaybackItem
-            var playbackItem = new MediaPlaybackItem(mediaSource);
-            
-            // Create MediaPlaybackList for seamless looping
+            var mediaSource = MediaSource.CreateFromStorageFile(source);          
+            var playbackItem = new MediaPlaybackItem(mediaSource);    
             var playbackList = new MediaPlaybackList();
             
-            // Enable gapless playback - this is key for seamless loops
+            // Enable gapless playback
             playbackList.AutoRepeatEnabled = true;
-            playbackList.MaxPrefetchTime = TimeSpan.FromSeconds(5); // Pre-buffer up to 5 seconds
+            playbackList.MaxPrefetchTime = TimeSpan.FromSeconds(5);
             
-            // Add the same item to the list
             playbackList.Items.Add(playbackItem);
             
-            // Set the source to the playback list
             player.Source = playbackList;
         }
         else
         {
-            _isSeamlessLooping = false;
+            isSeamlessLooping = false;
             
-            // For non-looping playback, use regular MediaSource
             player.IsLoopingEnabled = false;
             player.SetUriSource(new Uri(source.Path));
         }
@@ -219,7 +207,7 @@ public sealed partial class VisualPlayer : UserControl
         VideoElement.MediaPlayer.MediaEnded += VisualPlayer_MediaEnded;
 
         LoadRing.IsActive = false;
-        CanRotate = false;
+        canRotate = false;
 
         ParentPage?.ParentPage?.RotateButton.IsEnabled = false;
 
@@ -231,7 +219,6 @@ public sealed partial class VisualPlayer : UserControl
         }
         catch
         {
-            // Ignore ffprobe errors if video can still be played
             VideoFrameRate = 30.0;
         }
 
@@ -255,7 +242,7 @@ public sealed partial class VisualPlayer : UserControl
 
     public async Task Rotate()
     {      
-        if (CanRotate)
+        if (canRotate)
         {
             ImageRotation.Angle = (ImageRotation.Angle + 90) % 360;
             await ImageElement.Rotate(CurrentFile, Windows.Graphics.Imaging.BitmapRotation.Clockwise90Degrees);
@@ -369,14 +356,14 @@ public sealed partial class VisualPlayer : UserControl
 
             // For seamless looping, prevent transport controls from showing on loop restarts
             // Only allow restore on the first MediaOpened event
-            if (_isSeamlessLooping && _initialMediaOpened)
+            if (isSeamlessLooping && initialMediaOpened)
             {
                 // This is a loop restart - don't restore state or show controls
                 // The transport controls auto-hide timer should continue
                 return;
             }
 
-            _initialMediaOpened = true;
+            initialMediaOpened = true;
 
             var savedState = LoadPlaybackState(CurrentFile);
 
@@ -630,74 +617,35 @@ public sealed partial class VisualPlayer : UserControl
         Flyout.Items.Add(OpenWithItem);
 
         //Save As Item
-        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Frame As", Icon = new SymbolIcon(Symbol.SaveLocal) };
+        MenuFlyoutItem SaveAsItem = new MenuFlyoutItem { Text = $"Save Image As", Icon = new SymbolIcon(Symbol.SaveLocal) };
         SaveAsItem.Click += async (_, __) => await SaveFrameToFile();
         Flyout.Items.Add(SaveAsItem);
 
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
-        //Edit 
-        MenuFlyoutSubItem EditItem = new MenuFlyoutSubItem { Text = $"Edit", Icon = new SymbolIcon(Symbol.Edit) };
 
-        //Edit Video
-        IconElement? editvideoicon = Files.GetAppDisplayName(Settings.Current.VideoEditorPath) != null
-             ? await Files.GetAppIconAsync(Settings.Current.VideoEditorPath)
-             : new SymbolIcon(Symbol.Edit);
-        MenuFlyoutItem EditVideoItem = new MenuFlyoutItem { Text = $"Edit Video", Icon = editvideoicon };
-        EditVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Editor);
-        EditItem.Items.Add(EditVideoItem);
-
-        //Edit Frame
-        IconElement? editframeicon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
+        //Edit Image
+        IconElement? editimageicon = Files.GetAppDisplayName(Settings.Current.ImageEditorPath) != null
              ? await Files.GetAppIconAsync(Settings.Current.ImageEditorPath)
              : new SymbolIcon(Symbol.Edit);
-        MenuFlyoutItem EditFrameItem = new MenuFlyoutItem { Text = $"Edit Frame", Icon = editframeicon };
-        EditFrameItem.Click += async (_, __) => await EditCurrentFrame();
-        EditItem.Items.Add(EditFrameItem);
-
-        //Separator
-        EditItem.Items.Add(new MenuFlyoutSeparator());
-
-        //Converter to Gif
-        MenuFlyoutItem ConvertToGifItem = new MenuFlyoutItem { Text = $"Convert to Gif", Icon = new FontIcon() { Glyph = "\uF4A9" } };
-        EditItem.Items.Add(ConvertToGifItem);
-
-        EditItem.Items.Add(new MenuFlyoutSeparator());
-
-        //Video Converter
-
-        if (File.Exists(Settings.Current.VideoConverterPath))
-        {
-            MenuFlyoutItem ConvertVideoItem = new MenuFlyoutItem { Text = $"Convert Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoConverterPath) };
-            ConvertVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Converter); ;
-            EditItem.Items.Add(ConvertVideoItem);
-            EditItem.Items.Add(new MenuFlyoutSeparator());
-        }
-
-        //Video Upscaler
-        if (File.Exists(Settings.Current.VideoUpscalerPath))
-        {
-            MenuFlyoutItem UpscaleVideoItem = new MenuFlyoutItem { Text = $"Upscale Video", Icon = await Files.GetAppIconAsync(Settings.Current.VideoUpscalerPath) };
-            UpscaleVideoItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
-            EditItem.Items.Add(UpscaleVideoItem);
-        }
+        MenuFlyoutItem EditImageItem = new MenuFlyoutItem { Text = $"Edit Image", Icon = editimageicon };
+        EditImageItem.Click += async (_, __) => await EditCurrentFrame();
+        Flyout.Items.Add(EditImageItem);
          
         //Image Upscaler
         if (File.Exists(Settings.Current.ImageUpscalerPath))
         {
-            MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Frame", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
+            MenuFlyoutItem UpscaleFrameItem = new MenuFlyoutItem { Text = $"Upscale Image", Icon = await Files.GetAppIconAsync(Settings.Current.ImageUpscalerPath) };
             UpscaleFrameItem.Click += async (_, __) => MediaExtensions.OpenFile(CurrentFile, OpenAction.Upscaler); ;
-            EditItem.Items.Add(UpscaleFrameItem);
+            Flyout.Items.Add(UpscaleFrameItem);
         }
-
-        Flyout.Items.Add(EditItem);
 
         //Separator
         Flyout.Items.Add(new MenuFlyoutSeparator());
 
         //Copy Frame Item
-        MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Frame", Icon = new SymbolIcon(Symbol.Copy) };
+        MenuFlyoutItem CopyFrameItem = new MenuFlyoutItem { Text = $"Copy Image", Icon = new SymbolIcon(Symbol.Copy) };
         CopyFrameItem.Click += async (_, __) => CopyFrameToClipboard();
         Flyout.Items.Add(CopyFrameItem);
 
@@ -797,20 +745,43 @@ public sealed partial class VisualPlayer : UserControl
         }
     }
 
-    private void VisualPlayerPresenter_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        Grid GD = (Grid)sender;
-        MediaPlayerPresenter presenter = (MediaPlayerPresenter)GD.Tag;
-        MediaButton mediaButton = (MediaButton)presenter.Tag;
 
-        if (!isPaused)
+
+    private async void VisualPlayerPresenter_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        tapCancellation?.Cancel();
+        tapCancellation = new System.Threading.CancellationTokenSource();
+        var token = tapCancellation.Token;
+
+        try
         {
-            presenter.MediaPlayer.Pause();
+            await Task.Delay(TAP_DELAY_MS, token);
+
+            Grid GD = (Grid)sender;
+            MediaPlayerPresenter presenter = (MediaPlayerPresenter)GD.Tag;
+
+            if (!isPaused)
+            {
+                presenter.MediaPlayer.Pause();
+            }
+            else if (isPaused)
+            {
+                presenter.MediaPlayer.Play();
+            }
         }
-        else if (isPaused)
+        catch (TaskCanceledException)
         {
-            presenter.MediaPlayer.Play();
+            // Double-tap detected - do nothing
         }
+    }
+
+    private void VisualPlayerPresenter_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    {
+        tapCancellation?.Cancel();
+
+        ToggleFullscreen();
+
+        e.Handled = true;
     }
 
     private async void VisualPlayerPresenter_RightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -940,7 +911,6 @@ public sealed partial class VisualPlayer : UserControl
 
         Flyout.ShowAt(s, e.GetPosition(s));
     }
-
 
 
     private void ImageScrollViewer_Loaded(object sender, RoutedEventArgs e)
@@ -2266,10 +2236,6 @@ public sealed partial class VisualPlayer : UserControl
         ToggleFullscreen();
     }
 
-    private void VisualPlayerPresenter_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
-    {
-        ToggleFullscreen();
-    }
 
     private void ToggleFullscreen()
     {
@@ -2307,8 +2273,8 @@ public sealed partial class VisualPlayer : UserControl
             // Handle repeat mode changes dynamically
             if (e == RepeatMode.RepeatOne && CurrentFile != null)
             {
-                _isSeamlessLooping = true;
-                _initialMediaOpened = false; // Reset for new source
+                isSeamlessLooping = true;
+                initialMediaOpened = false; // Reset for new source
                 
                 // Switch to seamless looping using MediaPlaybackList
                 var mediaSource = MediaSource.CreateFromUri(new Uri(CurrentFile.Path));
@@ -2349,8 +2315,8 @@ public sealed partial class VisualPlayer : UserControl
             }
             else
             {
-                _isSeamlessLooping = false;
-                _initialMediaOpened = false; // Reset for new source
+                isSeamlessLooping = false;
+                initialMediaOpened = false; // Reset for new source
                 
                 // Disable looping or use standard loop for RepeatAll
                 // Check if current source is a MediaPlaybackList
